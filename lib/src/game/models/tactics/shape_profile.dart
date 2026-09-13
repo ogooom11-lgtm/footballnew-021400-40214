@@ -1,5 +1,4 @@
 /// Behaviour profile of a formation (plan items 4 and 24).
-///
 /// Every formation preset owns a base shape plus an attacking, defensive,
 /// pressing and transition shape. The numbers below are *morph magnitudes*
 /// (fractions of pitch width/height), never fixed offsets: the shape engine

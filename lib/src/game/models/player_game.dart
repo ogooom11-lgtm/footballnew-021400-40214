@@ -37,6 +37,23 @@ class PlayerGame {
   double catchTimer = 0;
   double jumpBoostMeters = 0;
   double jumpAnimationTimer = 0;
+
+  /// Landing recovery: after a jump the player cannot sprint for a moment —
+  /// he lands, plants his feet and only then accelerates again (
+
+  double landingRecoveryTimer = 0;
+
+  /// True while this player is contesting a high ball in the air.
+  bool isAirborne = false;
+
+  /// The last moment this player won/lost a 50-50 duel, stamped with the
+  /// match clock. Keeps duels from flipping every frame.
+  double lastDuelMinute = -10;
+
+  /// How long this player must wait before he can secure the ball again
+  /// after losing it (Gereksinim).
+  double ballControlCooldown = 0;
+
   bool isSentOff = false;
   int yellowCardsThisMatch = 0;
   double stamina = 1.0;
@@ -45,7 +62,7 @@ class PlayerGame {
   /// The match minute this player entered and (if he already left through
   /// a substitution, injury or red card) the minute he went off. The VAR
   /// panel uses these to show exactly when the player was on the pitch
-  /// (مطلب: الفترة يل كان اللاعب متواجد باللعبة تبين في الفار).
+  /// (Gereksinim).
   double enteredMatchMinute = 0;
   double? leftMatchMinute;
   String keeperState = 'hazir';
@@ -99,11 +116,39 @@ class PlayerGame {
       ? GameConstants.goalkeeperRadius
       : GameConstants.playerRadius;
 
+  /// 0.0 = fully planted after a jump, 1.0 = free to run again.
+  double get landingFactor {
+    if (landingRecoveryTimer <= 0) {
+      return 1.0;
+    }
+    // Even at the very start of the landing the player is not frozen: he
+    // walks, he just cannot explode into a sprint.
+    return (0.34 + (1 - (landingRecoveryTimer / 0.55).clamp(0.0, 1.0)) * 0.66)
+        .clamp(0.34, 1.0)
+        .toDouble();
+  }
+
+  /// Duel strength: how hard this player is to dispossess physically —
+  /// balance, strength through the body size and pure intelligence
+  /// (Gereksinim).
+  double get duelStrength {
+    final physique = ((profile.heightMeters - 1.62) / 0.40).clamp(0.0, 1.0);
+    return (profile.balanceSkill * 0.42 +
+            profile.staminaSkill * 0.16 +
+            physique * 0.14 +
+            zekaFactor * 0.28)
+        .clamp(0.0, 1.0)
+        .toDouble();
+  }
+
+  /// Zeka Gücü normalised to 0..1 — the player's decision intelligence.
+  double get zekaFactor => (profile.zekaGucu / 100).clamp(0.0, 1.0).toDouble();
+
   double get speed {
     // Fatigue gradually affects speed; a tired player should slow down, not
     // become unusable after a short spell of pressing.
     final staminaFactor = 0.58 + stamina * 0.42;
-    final speedFactor = 0.74 + profile.speedSkill * 0.52;
+    final speedFactor = (0.74 + profile.speedSkill * 0.52) * landingFactor;
     if (role == PlayerRole.goalkeeper) {
       const realisticKeeperBaseSpeed = 2.18;
       if (keeperGroundTimer > 0) {

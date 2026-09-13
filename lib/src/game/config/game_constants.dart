@@ -23,9 +23,14 @@ class GameConstants {
   static const double realSecondsPerGameMinute = 5 * 60 / 90;
   static const double gravityMeters = 9.8;
   static const double replayFreezeSeconds = 2.6;
+  /// A VAR check is quick: the referee looks at the screen, decides, and the
+  /// match is back under way about a second later (
+
+  static const double varFreezeSeconds = 1.0;
+  static const double varConfirmSeconds = 0.9;
   static const double periodPauseSeconds = 2.2;
   /// A straight red card costs the player exactly one team match
-  /// (المطلب: عقاب الكرت الأحمر مباراة واحدة).
+  /// (Gereksinim).
   static const int redCardSuspensionMatches = 1;
   /// Standard free-kick wall distance: 9.15 m converted to the pitch scale
   /// (105 m ≈ pitchWidth px) — the human wall stands clearly farther from

@@ -80,7 +80,7 @@ class ShotCalculator {
     var lateralError = _gaussian() * sigmaPixels;
     // From very close range the ball must stay on target: shots beside a
     //open goal never drift outside the posts
-    // (مطلب: التسديد من جنب المرمى يدخل المرمى خصوصًا إذا كان فاضيًا).
+    // (Gereksinim).
     if (context.distanceMeters <= 13) {
       lateralError = (lateralError * 0.45).clamp(
         -context.goalWidthPixels * 0.22,
@@ -93,7 +93,7 @@ class ShotCalculator {
     // crossbar band; missing high is possible but less frequent.
     // The height error stays small: shooting logic previously produced too
     // many balls flying into the crossbar band
-    // (مطلب إصلاح منطق العارضة).
+    // (Gereksinim).
     final heightSigma = (baseSigma *
             (0.72 + context.powerInput * 0.40) /
             math.sqrt(conditions) *

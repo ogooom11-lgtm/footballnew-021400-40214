@@ -329,7 +329,7 @@ class TeamGame {
     final incoming = bench[benchIndex];
     // Emergency mode lets a field player take the keeper slot (or vice
     // versa) when no proper keeper is available
-    // (مطلب: تعيين لاعب أرضي حارساً عند غياب الحارس).
+    // (Gereksinim).
     if (!allowKeeperSwap &&
         outgoing.isGoalkeeper != incoming.profile.isGoalkeeper) {
       return false;
@@ -427,7 +427,7 @@ class TeamGame {
 
   /// Emergency: puts a sent-off player back on the pitch in [slotIndex]
   /// (his own slot by default). Used when the team has no replacements left
-  /// (مطلب: قد يعود المطرود إذا لم يكن هناك بدلاء).
+  /// (Gereksinim).
   bool reinstateSentOff(int slotIndex, {double minute = 0}) {
     if (slotIndex < 0 || slotIndex >= players.length) {
       return false;

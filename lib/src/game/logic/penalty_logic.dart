@@ -23,6 +23,20 @@ extension PenaltyLaneText on PenaltyLane {
   };
 }
 
+/// What actually happened to the penalty. The visual replay reads this, so
+/// the ball on the pitch always does what the verdict says
+/// (Gereksinim).
+enum PenaltyOutcome { goal, saved, wide, overBar }
+
+extension PenaltyOutcomeText on PenaltyOutcome {
+  String get title => switch (this) {
+    PenaltyOutcome.goal => 'GOL',
+    PenaltyOutcome.saved => 'KALECI KURTARDI',
+    PenaltyOutcome.wide => 'DIREKTEN DISARI',
+    PenaltyOutcome.overBar => 'USTTEN AVUT',
+  };
+}
+
 class PenaltyKickResult {
   const PenaltyKickResult({
     required this.teamId,
@@ -34,6 +48,10 @@ class PenaltyKickResult {
     required this.power,
     required this.scored,
     required this.minute,
+    this.outcome = PenaltyOutcome.goal,
+    this.missAmount = 0,
+    this.powerQuality = 0.5,
+    this.accuracyQuality = 0.5,
   });
 
   final TeamId teamId;
@@ -46,8 +64,22 @@ class PenaltyKickResult {
   final bool scored;
   final int minute;
 
+  /// The exact verdict of the kick.
+  final PenaltyOutcome outcome;
+
+  /// How far outside the frame a missed kick travelled (pixels).
+  final double missAmount;
+
+  /// 0..1 — how well the ball was struck (shot power relative to the ideal
+  /// band).
+  final double powerQuality;
+
+  /// 0..1 — how clean the placement was (finishing / shooting accuracy).
+  final double accuracyQuality;
+
   String get summary =>
-      '$shooterName: ${shotLane.title}, ${heightMeters.toStringAsFixed(2)} m, kaleci ${keeperLane.sideTitle} - ${scored ? 'Gol' : 'Kurtaris'}';
+      '$shooterName: ${shotLane.title}, ${heightMeters.toStringAsFixed(2)} m, '
+      'kaleci ${keeperLane.sideTitle} - ${outcome.title}';
 }
 
 class ActivePenalty {
@@ -178,58 +210,136 @@ class PenaltyLogic {
         : shooters[kickIndex % shooters.length];
     final keeper = defendingTeam.goalkeeper;
     final clampedPower = power.clamp(0.55, 1.65).toDouble();
-    final height = _heightFromPower(clampedPower, shotDirection);
-    final shotLane = _laneWithHeight(shotDirection, height);
-    final guessed = _sameSide(shotLane, keeperDirection);
+    final profile = shooter.profile;
+
+    // -------------------------------------------------------------------
+    // 1) The shooter: finishing (bitiricilik), shooting accuracy and the
+    //    strike itself decide WHERE the ball goes.
+    // -------------------------------------------------------------------
+    final careerAccuracy = (profile.shootingAccuracyPercent / 100)
+        .clamp(0.0, 1.0)
+        .toDouble();
+    final accuracyQuality =
+        (profile.finishingSkill * 0.40 +
+                profile.composureSkill * 0.24 +
+                profile.shotSkill * 0.18 +
+                careerAccuracy * 0.18)
+            .clamp(0.05, 0.99)
+            .toDouble();
+    // Power band: below 0.80 the keeper eats it, above 1.40 the strike
+    // sprays. 0.95–1.35 is the sweet spot.
+    final powerQuality =
+        (1.0 - ((clampedPower - 1.15).abs() / 0.55).clamp(0.0, 1.0))
+            .toDouble();
+    final overhit =
+        (clampedPower - 1.35).clamp(0.0, 0.30).toDouble();
+    final underhit = (0.85 - clampedPower).clamp(0.0, 0.30).toDouble();
+    final cornerAim = shotDirection == PenaltyLane.center ? 0.0 : 1.0;
+    // The spread of the strike in "goal units": 1.0 is a full goal width
+    // off target (i.e. a hopeless miss).
+    final spread = ((1 - accuracyQuality) * 0.62 +
+            overhit * 1.15 +
+            underhit * 0.18 +
+            cornerAim * 0.10 -
+            0.06)
+        .clamp(0.05, 0.95)
+        .toDouble();
+    final error = (random.nextDouble() + random.nextDouble() - 1.0) * spread;
+    // Height follows the aim and the power: a hard low corner stays low, a
+    // hard strike aimed high can climb over the bar.
+    var height = shotDirection == PenaltyLane.center
+        ? 0.45 + powerQuality * 0.55
+        : 0.60 + powerQuality * 0.95 + overhit * 1.6;
+    height += (random.nextDouble() - 0.5) * 0.35;
+
+    var shotLane = _laneWithHeight(shotDirection, height);
     final keeperStats = keeper.profile.goalkeeperStats;
-    final saveSkill = keeperStats.reaction * 0.36 +
-        keeperStats.diving * 0.28 +
-        keeperStats.oneVsOne * 0.24 +
-        keeperStats.positioning * 0.12;
-    final highRisk = height > 1.65;
-    final tooHigh = height > 2.44;
-    final tooWeak = clampedPower < 0.72;
-    // A good finisher very rarely misses the frame — the miss chance is
-    // small and scales strongly with skill.
-    final missChance =
-        (tooHigh ? 0.30 : 0.02) +
-        (highRisk ? 0.05 : 0) +
-        (tooWeak ? 0.03 : 0) +
-        (1 - shooter.profile.finishingSkill) * 0.07 +
-        (1 - shooter.profile.composureSkill) * 0.08;
-    final saveChance = guessed
-        ? (height > 1.55 ? 0.24 : 0.20) + saveSkill * 0.14
-        : (keeperDirection == PenaltyLane.center &&
-                  shotLane == PenaltyLane.center
-              ? 0.16 + saveSkill * 0.10
-              : 0.03 + saveSkill * 0.05);
-    final shooterBonus =
-        (shooter.profile.heightMeters - 1.70) * 0.32 +
-        shooter.profile.finishingSkill * 0.16 +
-        shooter.profile.composureSkill * 0.14 +
-        shooter.profile.shotSkill * 0.07 +
-        (shooter.role.isAttacker ? 0.05 : 0);
-    final keeperBonus =
-        (keeper.profile.heightMeters - 1.70) * 0.16 + saveSkill * 0.08;
-    final scored =
-        random.nextDouble() >
-        (missChance + saveChance + keeperBonus - shooterBonus).clamp(
-          0.03,
-          0.72,
-        );
+    final saveSkill = (keeperStats.reaction * 0.34 +
+            keeperStats.diving * 0.28 +
+            keeperStats.oneVsOne * 0.24 +
+            keeperStats.positioning * 0.14 +
+            (keeper.profile.heightMeters - 1.70) * 0.25)
+        .clamp(0.0, 1.0)
+        .toDouble();
+
+    // -------------------------------------------------------------------
+    // 2) The verdict.
+    // -------------------------------------------------------------------
+    PenaltyOutcome outcome;
+    var missAmount = 0.0;
+    if (height > 2.44) {
+      outcome = PenaltyOutcome.overBar;
+      missAmount = 14 + error.abs() * 30;
+    } else if (error > 0.58) {
+      // Pushed wide of the post: the worse the strike, the further out.
+      outcome = PenaltyOutcome.wide;
+      missAmount = 8 + (error - 0.58) * 46 + (1 - accuracyQuality) * 10;
+    } else {
+      final guessedSameSide = _sameSide(shotLane, keeperDirection);
+      var saveChance = guessedSameSide
+          ? 0.26 + saveSkill * 0.34
+          : 0.025 + saveSkill * 0.10;
+      if (shotLane == PenaltyLane.center) {
+        // A central penalty is a gift to any keeper who stands still.
+        saveChance += 0.16;
+      }
+      if (keeperDirection == PenaltyLane.center &&
+          shotLane != PenaltyLane.center) {
+        saveChance -= 0.05;
+      }
+      // Hard, well-placed strikes are much harder to stop.
+      saveChance *= 1.30 - powerQuality * 0.45;
+      saveChance *= 1.0 - accuracyQuality * 0.22;
+      // Nerves: a composed shooter adds % to the kick.
+      saveChance *= 1.12 - profile.composureSkill * 0.20;
+      saveChance = saveChance.clamp(0.02, 0.78).toDouble();
+      outcome = random.nextDouble() < saveChance
+          ? PenaltyOutcome.saved
+          : PenaltyOutcome.goal;
+    }
+
+    // -------------------------------------------------------------------
+    // 3) Keep the picture honest: if it is a goal the keeper went the wrong
+    //    way (or was beaten by the pace), if it is a save he gets there.
+    // -------------------------------------------------------------------
+    var keeperLane = keeperDirection;
+    if (outcome == PenaltyOutcome.goal &&
+        _sameSide(shotLane, keeperDirection)) {
+      keeperLane = _oppositeSideOf(shotLane);
+    } else if (outcome == PenaltyOutcome.saved) {
+      keeperLane = shotLane;
+    }
+    if (outcome == PenaltyOutcome.saved || outcome == PenaltyOutcome.goal) {
+      // Nothing above the bar in a scored/kept penalty.
+      height = height.clamp(0.30, 2.40).toDouble();
+      shotLane = _laneWithHeight(shotLane, height);
+    }
 
     return PenaltyKickResult(
       teamId: shootingTeam.id,
-      shooterName: shooter.profile.name,
+      shooterName: profile.name,
       goalkeeperName: keeper.profile.name,
       shotLane: shotLane,
-      keeperLane: keeperDirection,
+      keeperLane: keeperLane,
       heightMeters: height,
       power: clampedPower,
-      scored: scored,
+      scored: outcome == PenaltyOutcome.goal,
       minute: minute,
+      outcome: outcome,
+      missAmount: missAmount,
+      powerQuality: powerQuality,
+      accuracyQuality: accuracyQuality,
     );
   }
+
+  /// The mirrored lane used when the keeper is beaten.
+  PenaltyLane _oppositeSideOf(PenaltyLane lane) => switch (lane) {
+    PenaltyLane.leftLow => PenaltyLane.rightLow,
+    PenaltyLane.leftHigh => PenaltyLane.rightHigh,
+    PenaltyLane.rightLow => PenaltyLane.leftLow,
+    PenaltyLane.rightHigh => PenaltyLane.leftHigh,
+    PenaltyLane.center => PenaltyLane.center,
+  };
 
   double _shooterValue(PlayerGame player) {
     final roleBonus = player.role.isAttacker

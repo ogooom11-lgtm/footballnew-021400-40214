@@ -462,10 +462,10 @@ class _SetupScreenState extends State<SetupScreen> {
     if (data == null) {
       return;
     }
-    // حذف اللاعبين متاح فقط لحساب الإدارة (kimo@)
-    // (مطلب: حذف اللاعب من حساب الإدارة فقط).
+    // (kimo@)
+    // (Gereksinim).
     if (!data.adminFullAccess) {
-      _showMessage('حذف اللاعب متاح فقط من حساب الإدارة');
+      _showMessage('Oyuncu silme sadece yonetici hesabinda');
       return;
     }
     setState(() {
@@ -1024,7 +1024,7 @@ class _SetupScreenState extends State<SetupScreen> {
               FilledButton.icon(
                 onPressed: _startMatch,
                 icon: const Icon(Icons.play_arrow, size: 20),
-                label: const Text('ابدأ المباراة'),
+                label: const Text('Maci baslat'),
                 style: FilledButton.styleFrom(
                   backgroundColor: const Color(0xff00c896),
                   foregroundColor: const Color(0xff00130c),
@@ -1192,6 +1192,7 @@ class _SetupScreenState extends State<SetupScreen> {
       decoration: _panelDecoration(),
       child: ListView(
         children: [
+          _preMatchUnavailableNotice(data),
           // ---------- Modern VS header ----------
           Container(
             padding: const EdgeInsets.all(14),
@@ -1229,7 +1230,7 @@ class _SetupScreenState extends State<SetupScreen> {
                             value: data.blueTeamId,
                             isDense: true,
                             decoration: const InputDecoration(
-                              labelText: 'الفريق الأزرق',
+                              labelText: 'Mavi takim',
                               isDense: true,
                             ),
                             items: [
@@ -1265,7 +1266,7 @@ class _SetupScreenState extends State<SetupScreen> {
                               color: Color(0xffffdf6b),
                             ),
                             decoration: const InputDecoration(
-                              labelText: 'الاسم',
+                              labelText: 'Ad',
                               isDense: true,
                             ),
                             onChanged: (_) => _save(),
@@ -1319,7 +1320,7 @@ class _SetupScreenState extends State<SetupScreen> {
                             value: data.redTeamId,
                             isDense: true,
                             decoration: const InputDecoration(
-                              labelText: 'الفريق الأحمر',
+                              labelText: 'Kirmizi takim',
                               isDense: true,
                             ),
                             items: [
@@ -1355,7 +1356,7 @@ class _SetupScreenState extends State<SetupScreen> {
                               color: Color(0xff7ab8ff),
                             ),
                             decoration: const InputDecoration(
-                              labelText: 'الاسم',
+                              labelText: 'Ad',
                               isDense: true,
                             ),
                             onChanged: (_) => _save(),
@@ -1371,7 +1372,7 @@ class _SetupScreenState extends State<SetupScreen> {
           const SizedBox(height: 14),
 
           // ---------- Match mode ----------
-          const Text('نوع المباراة',
+          const Text('Mac turu',
               style: TextStyle(fontWeight: FontWeight.w900)),
           const SizedBox(height: 8),
           SegmentedButton<MatchMode>(
@@ -1408,11 +1409,11 @@ class _SetupScreenState extends State<SetupScreen> {
           const Divider(height: 24),
 
           // ---------- Formations ----------
-          const Text('التشكيلات',
+          const Text('Kadrolar',
               style: TextStyle(fontWeight: FontWeight.w900)),
           const SizedBox(height: 8),
           _formationDropdown(
-            title: 'تشكيل الفريق الأزرق',
+            title: 'Mavi takim kadrosu',
             value: data.blueFormation,
             onChanged: (value) {
               setState(() => data.blueFormation = value);
@@ -1421,7 +1422,7 @@ class _SetupScreenState extends State<SetupScreen> {
           ),
           const SizedBox(height: 10),
           _formationDropdown(
-            title: 'تشكيل الفريق الأحمر',
+            title: 'Kirmizi takim kadrosu',
             value: data.redFormation,
             onChanged: (value) {
               setState(() => data.redFormation = value);
@@ -1431,14 +1432,14 @@ class _SetupScreenState extends State<SetupScreen> {
           const Divider(height: 24),
 
           // ---------- AI ----------
-          const Text('الذكاء الاصطناعي وأسلوب اللعب',
+          const Text('Yapay zeka ve oyun tarzi',
               style: TextStyle(fontWeight: FontWeight.w900)),
           const SizedBox(height: 4),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             dense: true,
             activeColor: const Color(0xffffd34d),
-            title: const Text('تحكم AI للفريق الأزرق', style: TextStyle(fontSize: 13)),
+            title: const Text('Mavi takim AI kontrolu', style: TextStyle(fontSize: 13)),
             value: _blueAiControlled,
             onChanged: (value) {
               setState(() => _blueAiControlled = value);
@@ -1449,7 +1450,7 @@ class _SetupScreenState extends State<SetupScreen> {
             contentPadding: EdgeInsets.zero,
             dense: true,
             activeColor: const Color(0xffffd34d),
-            title: const Text('تحكم AI للفريق الأحمر', style: TextStyle(fontSize: 13)),
+            title: const Text('Kirmizi takim AI kontrolu', style: TextStyle(fontSize: 13)),
             value: _redAiControlled,
             onChanged: (value) {
               setState(() => _redAiControlled = value);
@@ -1459,7 +1460,7 @@ class _SetupScreenState extends State<SetupScreen> {
           const SizedBox(height: 4),
           DropdownButtonFormField<AiDifficulty>(
             value: _aiDifficulty,
-            decoration: const InputDecoration(labelText: 'صعوبة الذكاء الاصطناعي'),
+            decoration: const InputDecoration(labelText: 'Yapay zeka zorlugu'),
             items: AiDifficulty.values
                 .map(
                   (difficulty) => DropdownMenuItem(
@@ -1477,7 +1478,7 @@ class _SetupScreenState extends State<SetupScreen> {
           const SizedBox(height: 10),
           DropdownButtonFormField<AiPlayStyle>(
             value: _bluePlayStyle,
-            decoration: const InputDecoration(labelText: 'أسلوب الفريق الأزرق'),
+            decoration: const InputDecoration(labelText: 'Mavi takim tarzi'),
             items: AiPlayStyle.values
                 .map((style) => DropdownMenuItem(
                       value: style,
@@ -1493,7 +1494,7 @@ class _SetupScreenState extends State<SetupScreen> {
           const SizedBox(height: 10),
           DropdownButtonFormField<AiPlayStyle>(
             value: _redPlayStyle,
-            decoration: const InputDecoration(labelText: 'أسلوب الفريق الأحمر'),
+            decoration: const InputDecoration(labelText: 'Kirmizi takim tarzi'),
             items: AiPlayStyle.values
                 .map((style) => DropdownMenuItem(
                       value: style,
@@ -1510,14 +1511,14 @@ class _SetupScreenState extends State<SetupScreen> {
           ExpansionTile(
             tilePadding: EdgeInsets.zero,
             title: const Text(
-              'شرح ركلات الترجيح',
+              'Penalti aciklamasi',
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
             ),
             children: [
               Align(
                 alignment: AlignmentDirectional.centerStart,
                 child: Text(
-                  'في مباراة الإقصاء، عند التعادل يمتد اللعب إلى الدقيقة 120. بعدها تُنفَّذ ركلات الترجيح تلقائيًا وبذكاء: اتجاه التسديد والارتفاع وتوقع الحارس وطول اللاعب تؤثر كلها في النتيجة.',
+                  'Eleme macinda beraberlik halinde oyun 120. dakikaya kadar uzar. Sonra penaltilar otomatik ve akilli sekilde kullanilir: vurus yonu, yukseklik, kaleci tahmini ve oyuncu boyu sonucu etkiler.',
                   style: const TextStyle(
                       color: Colors.white60, height: 1.4, fontSize: 12),
                 ),
@@ -1734,8 +1735,8 @@ class _SetupScreenState extends State<SetupScreen> {
         query.isEmpty ||
         player.name.toLowerCase().contains(query) ||
         (player.number?.toString().contains(query) ?? false);
-    // كل اللاعبين مرتبين من الأفضل للأقل حسب معدل النقاط (puan ortalamasi)
-    // (مطلب: ترتيب اللاعبين حسب معدل النقاط).
+    // (puan ortalamasi)
+    // (Gereksinim).
     final ranked = data.players.where(matches).toList()
       ..sort((a, b) {
         final aAvg = a.matchesPlayed == 0 ? -1.0 : a.points / a.matchesPlayed;
@@ -1771,14 +1772,14 @@ class _SetupScreenState extends State<SetupScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'اللاعبون — ترتيب حسب معدل النقاط',
+                        'Oyuncular — puan ortalamasina gore',
                         style: TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w900,
                         ),
                       ),
                       Text(
-                        'كل لاعب مع فريقه وأهدافه وقيمته ونسبه وتصدياته',
+                        'Her oyuncu takimi, golleri, degeri, yuzdeleri ve kurtarislariyla',
                         style: TextStyle(
                           fontSize: 11,
                           color: Colors.white54,
@@ -1790,7 +1791,7 @@ class _SetupScreenState extends State<SetupScreen> {
                 OutlinedButton.icon(
                   onPressed: _openFreeAgents,
                   icon: const Icon(Icons.person_search, size: 18),
-                  label: const Text('أحرار'),
+                  label: const Text('Serbest'),
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: Colors.white24),
                   ),
@@ -1803,7 +1804,7 @@ class _SetupScreenState extends State<SetupScreen> {
             child: TextField(
               decoration: const InputDecoration(
                 prefixIcon: Icon(Icons.search),
-                labelText: 'ابحث عن لاعب (اسم أو رقم)',
+                labelText: 'Oyuncu ara (ad veya numara)',
                 isDense: true,
               ),
               onChanged: (value) => setState(() => _playerSearch = value),
@@ -1813,7 +1814,7 @@ class _SetupScreenState extends State<SetupScreen> {
             tilePadding: const EdgeInsets.symmetric(horizontal: 16),
             childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
             title: const Text(
-              'إضافة واستيراد لاعبين',
+              'Oyuncu ekle ve ice aktar',
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
             ),
             children: [
@@ -1823,7 +1824,7 @@ class _SetupScreenState extends State<SetupScreen> {
                     child: TextField(
                       controller: _newPlayerController,
                       decoration: const InputDecoration(
-                        labelText: 'اسم اللاعب',
+                        labelText: 'Oyuncu adi',
                         isDense: true,
                       ),
                       onSubmitted: (_) => _addPlayer(),
@@ -1832,7 +1833,7 @@ class _SetupScreenState extends State<SetupScreen> {
                   const SizedBox(width: 8),
                   FilterChip(
                     selected: _newIsGoalkeeper,
-                    label: const Text('حارس'),
+                    label: const Text('Kaleci'),
                     onSelected: (value) =>
                         setState(() => _newIsGoalkeeper = value),
                   ),
@@ -1840,7 +1841,7 @@ class _SetupScreenState extends State<SetupScreen> {
                   FilledButton.icon(
                     onPressed: _addPlayer,
                     icon: const Icon(Icons.add, size: 18),
-                    label: const Text('إضافة'),
+                    label: const Text('Ekle'),
                   ),
                 ],
               ),
@@ -1851,7 +1852,7 @@ class _SetupScreenState extends State<SetupScreen> {
                     child: TextField(
                       controller: _importPlayersPathController,
                       decoration: const InputDecoration(
-                        labelText: 'مسار ملف TXT',
+                        labelText: 'TXT dosya yolu',
                         isDense: true,
                       ),
                     ),
@@ -1860,7 +1861,7 @@ class _SetupScreenState extends State<SetupScreen> {
                   OutlinedButton.icon(
                     onPressed: _importPlayersFromTextFile,
                     icon: const Icon(Icons.upload_file, size: 18),
-                    label: const Text('استيراد'),
+                    label: const Text('Ice aktar'),
                   ),
                 ],
               ),
@@ -1871,7 +1872,7 @@ class _SetupScreenState extends State<SetupScreen> {
             child: ranked.isEmpty
                 ? const Center(
                     child: Text(
-                      'لا يوجد لاعبون',
+                      'Oyuncu yok',
                       style: TextStyle(color: Colors.white54),
                     ),
                   )
@@ -1899,7 +1900,7 @@ class _SetupScreenState extends State<SetupScreen> {
 
   /// Modern ranked player card: rank medal, team chip, goals, value, pass %,
   /// shot %, saves, matches and injury/suspension badges
-  /// (مطلب: تصميم أنيق لكل لاعب مع فريقه وإحصائياته).
+  /// (Gereksinim).
   Widget _rankedPlayerCard(
     SavedGameData data,
     PlayerProfile profile,
@@ -2024,15 +2025,15 @@ class _SetupScreenState extends State<SetupScreen> {
                   spacing: 6,
                   runSpacing: 5,
                   children: [
-                    _poolStat('معدل', avgPoints.toStringAsFixed(2),
+                    _poolStat('Ort.', avgPoints.toStringAsFixed(2),
                         highlight: true),
-                    _poolStat('أهداف', '${profile.goals}'),
-                    _poolStat('صناعة', '${profile.assists}'),
-                    _poolStat('تمرير %', '$passPercent'),
-                    _poolStat('تسديد %', '${profile.shootingAccuracyPercent}'),
-                    _poolStat('تصديات', '${profile.saves}'),
-                    _poolStat('مباريات', '${profile.matchesPlayed}'),
-                    _poolStat('القيمة', profile.marketValueText),
+                    _poolStat('Gol', '${profile.goals}'),
+                    _poolStat('Asist', '${profile.assists}'),
+                    _poolStat('Pas %', '$passPercent'),
+                    _poolStat('Sut %', '${profile.shootingAccuracyPercent}'),
+                    _poolStat('Kurtaris', '${profile.saves}'),
+                    _poolStat('Mac', '${profile.matchesPlayed}'),
+                    _poolStat('Deger', profile.marketValueText),
                   ],
                 ),
                 const SizedBox(height: 6),
@@ -2048,16 +2049,16 @@ class _SetupScreenState extends State<SetupScreen> {
                     const SizedBox(width: 4),
                     if (profile.isSuspended)
                       _statusBadge(
-                        'موقوف ${profile.suspendedMatchesRemaining}م',
+                        'Cezali ${profile.suspendedMatchesRemaining}M',
                         const Color(0xffffb020),
                       )
                     else if (profile.isInjured)
                       _statusBadge(
-                        'مصاب ${profile.injuredDaysRemaining}ي',
+                        'sakat ${profile.injuredDaysRemaining} gun',
                         const Color(0xffff6b6b),
                       )
                     else
-                      _statusBadge('جاهز', const Color(0xff2ee59d)),
+                      _statusBadge('Hazir', const Color(0xff2ee59d)),
                   ],
                 ),
               ],
@@ -2834,10 +2835,10 @@ class _SetupScreenState extends State<SetupScreen> {
                                 ],
                               ),
                             ),
-                            // Copy the player name (مطلب: نسخ اسم اللاعب
-                            // في قسم التحويلات).
+                            // Copy the player name (
+
                             IconButton(
-                              tooltip: 'نسخ اسم اللاعب',
+                              tooltip: 'Oyuncu adini kopyala',
                               onPressed: profile == null
                                   ? null
                                   : () async {
@@ -2849,7 +2850,7 @@ class _SetupScreenState extends State<SetupScreen> {
                                             .showSnackBar(
                                           SnackBar(
                                             content: Text(
-                                              'تم نسخ: ${profile.name}',
+                                              'Kopyalandi: ${profile.name}',
                                             ),
                                             duration:
                                                 const Duration(seconds: 1),
@@ -3097,7 +3098,7 @@ class _SetupScreenState extends State<SetupScreen> {
 
   /// Bulk admin tools (kimo@ only): team-wide market value steps,
   /// multi-select attribute editor, countries catalogue
-  /// (مطلب: أدوات الإدارة).
+  /// (Gereksinim).
   Widget _adminBulkToolbar(SavedGameData data, List<PlayerProfile> players) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
@@ -3109,14 +3110,14 @@ class _SetupScreenState extends State<SetupScreen> {
             children: [
               const Icon(Icons.shield_outlined, size: 18),
               const SizedBox(width: 6),
-              const Text('قيمة كل لاعبي الفريق:'),
+              const Text('Tum takim oyuncularinin degeri:'),
               const SizedBox(width: 8),
               SizedBox(
                 width: 190,
                 child: DropdownButtonFormField<String>(
                   value: _adminValueTeamId,
                   isDense: true,
-                  hint: const Text('اختر فريقاً'),
+                  hint: const Text('Bir takim sec'),
                   items: [
                     for (final team in data.activeTeams)
                       DropdownMenuItem(value: team.id, child: Text(team.name)),
@@ -3127,10 +3128,10 @@ class _SetupScreenState extends State<SetupScreen> {
               ),
               const SizedBox(width: 8),
               for (final (label, factor, flat) in const [
-                ('+كبير', 1.10, 20000000.0),
-                ('+صغير', 1.02, 1000000.0),
-                ('-صغير', 0.98, -1000000.0),
-                ('-كبير', 0.90, -20000000.0),
+                ('+Buyuk', 1.10, 20000000.0),
+                ('+Kucuk', 1.02, 1000000.0),
+                ('-Kucuk', 0.98, -1000000.0),
+                ('-Buyuk', 0.90, -20000000.0),
               ])
                 Padding(
                   padding: const EdgeInsets.only(right: 6),
@@ -3155,7 +3156,7 @@ class _SetupScreenState extends State<SetupScreen> {
               const Icon(Icons.checklist, size: 18),
               const SizedBox(width: 6),
               Text(
-                'المحددون: ${_adminSelectedPlayerIds.length}',
+                'Secilenler: ${_adminSelectedPlayerIds.length}',
                 style: const TextStyle(fontWeight: FontWeight.w800),
               ),
               const SizedBox(width: 8),
@@ -3164,7 +3165,7 @@ class _SetupScreenState extends State<SetupScreen> {
                 child: DropdownButtonFormField<String>(
                   value: _adminBulkAttribute,
                   isDense: true,
-                  hint: const Text('اختر الصفة'),
+                  hint: const Text('Ozelligi sec'),
                   items: [
                     for (final (key, label) in _adminAttributeChoices)
                       DropdownMenuItem(value: key, child: Text(label)),
@@ -3194,7 +3195,7 @@ class _SetupScreenState extends State<SetupScreen> {
                     ? null
                     : () => _applyBulkAttribute(1),
                 icon: const Icon(Icons.add),
-                label: const Text('زيادة'),
+                label: const Text('Arttir'),
               ),
               const SizedBox(width: 6),
               FilledButton.tonalIcon(
@@ -3203,14 +3204,14 @@ class _SetupScreenState extends State<SetupScreen> {
                     ? null
                     : () => _applyBulkAttribute(-1),
                 icon: const Icon(Icons.remove),
-                label: const Text('خفض'),
+                label: const Text('Azalt'),
               ),
               const SizedBox(width: 6),
               TextButton(
                 onPressed: _adminSelectedPlayerIds.isEmpty
                     ? null
                     : () => setState(() => _adminSelectedPlayerIds.clear()),
-                child: const Text('تفريغ التحديد'),
+                child: const Text('Secimi temizle'),
               ),
             ],
           ),
@@ -3220,7 +3221,7 @@ class _SetupScreenState extends State<SetupScreen> {
             children: [
               const Icon(Icons.public, size: 18),
               const SizedBox(width: 6),
-              const Text('الدول:'),
+              const Text('Ulkeler:'),
               const SizedBox(width: 6),
               Expanded(
                 child: SingleChildScrollView(
@@ -3241,7 +3242,7 @@ class _SetupScreenState extends State<SetupScreen> {
                 ),
               ),
               IconButton(
-                tooltip: 'إضافة دولة',
+                tooltip: 'Ulke ekle',
                 onPressed: () => _addCountryToCatalogue(data),
                 icon: const Icon(Icons.add_circle_outline, size: 20),
               ),
@@ -3253,20 +3254,20 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 
   static const List<(String, String)> _adminAttributeChoices = [
-    ('overallRating', 'التقييم العام'),
-    ('shootingRating', 'التسديد'),
-    ('finishingRating', 'الإنهاء (bitiricilik)'),
-    ('shotPowerRating', 'قوة التسديد (şut gücü)'),
-    ('longShotsRating', 'التسديد من بعيد'),
-    ('curveRating', 'الفalso'),
-    ('composureRating', 'الرباطة'),
-    ('balanceRating', 'التوازن'),
-    ('passingRating', 'التمرير'),
-    ('goalkeepingRating', 'حراسة المرمى'),
-    ('speedRating', 'السرعة'),
-    ('staminaRating', 'التحمل'),
-    ('dayaniklilikGucu', 'الصلابة'),
-    ('zekaGucu', 'الذكاء'),
+    ('overallRating', 'Genel degerlendirme'),
+    ('shootingRating', 'Sut'),
+    ('finishingRating', 'Bitiricilik'),
+    ('shotPowerRating', 'Şut gücü'),
+    ('longShotsRating', 'Uzaktan sut'),
+    ('curveRating', 'Falso'),
+    ('composureRating', 'Soguk kanlilik'),
+    ('balanceRating', 'Denge'),
+    ('passingRating', 'Pas'),
+    ('goalkeepingRating', 'Kaleci'),
+    ('speedRating', 'Hiz'),
+    ('staminaRating', 'Dayaniklilik'),
+    ('dayaniklilikGucu', 'Dayaniklik'),
+    ('zekaGucu', 'Zeka'),
   ];
 
   Future<void> _addCountryToCatalogue(SavedGameData data) async {
@@ -3275,21 +3276,21 @@ class _SetupScreenState extends State<SetupScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xff102019),
-        title: const Text('إضافة دولة للكتالوج'),
+        title: const Text('Katalog icin ulke ekle'),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(labelText: 'اسم الدولة'),
+          decoration: const InputDecoration(labelText: 'Ulke adi'),
           onSubmitted: (value) => Navigator.of(context).pop(value),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('إلغاء'),
+            child: const Text('Iptal'),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('إضافة'),
+            child: const Text('Ekle'),
           ),
         ],
       ),
@@ -3323,7 +3324,7 @@ class _SetupScreenState extends State<SetupScreen> {
       changed++;
     }
     _save();
-    _showMessage('تم تعديل قيمة $changed لاعباً');
+    _showMessage('$changed oyuncunun degeri guncellendi');
   }
 
   double? _attributeValue(PlayerProfile profile, String key) => switch (key) {
@@ -3391,7 +3392,7 @@ class _SetupScreenState extends State<SetupScreen> {
       changed++;
     }
     _save();
-    _showMessage('تم تعديل الصفة لـ $changed لاعب');
+    _showMessage('$changed oyuncunun ozelligi guncellendi');
   }
 
   Widget _lockedAdminPage() {
@@ -3567,18 +3568,18 @@ class _SetupScreenState extends State<SetupScreen> {
       ),
       childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       children: [
-        // Per-player market value steps (مطلب: تعديل قيمة لاعب واحد).
+        // Per-player market value steps (Gereksinim).
         Row(
           children: [
-            const Text('القيمة:', style: TextStyle(fontSize: 12)),
+            const Text('Deger:', style: TextStyle(fontSize: 12)),
             const SizedBox(width: 6),
             for (final (label, delta) in const [
-              ('+20م', 20000000.0),
-              ('+5م', 5000000.0),
-              ('+1م', 1000000.0),
-              ('-1م', -1000000.0),
-              ('-5م', -5000000.0),
-              ('-20م', -20000000.0),
+              ('+20M', 20000000.0),
+              ('+5M', 5000000.0),
+              ('+1M', 1000000.0),
+              ('-1M', -1000000.0),
+              ('-5M', -5000000.0),
+              ('-20M', -20000000.0),
             ])
               Padding(
                 padding: const EdgeInsets.only(right: 4),
@@ -4040,12 +4041,125 @@ class _SetupScreenState extends State<SetupScreen> {
     await _save();
   }
 
+  /// Warning shown before kick-off: which team has injured or suspended
+  /// players, with the injury date, the duration and the recovery date
+  /// (Gereksinim: mac baslamadan once sakat oyuncular gorunur).
+  Widget _preMatchUnavailableNotice(SavedGameData data) {
+    final injured = data.players
+        .where((profile) => profile.isInjured)
+        .toList();
+    final banned = data.players
+        .where((profile) => profile.isSuspended)
+        .toList();
+    if (injured.isEmpty && banned.isEmpty) {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: const Color(0xff10331f),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xff2e7d5b)),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.verified, color: Color(0xff4dd18a), size: 18),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Iki takimda da sakat veya cezali oyuncu yok — kadrolar tam.',
+                style: TextStyle(
+                  color: Color(0xff9fe8c4),
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xff5a1414), Color(0xff2a0d0d)],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.redAccent, width: 1.4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.medical_services, color: Colors.redAccent, size: 20),
+              SizedBox(width: 8),
+              Text(
+                'MAC ONCESI UYARI',
+                style: TextStyle(
+                  color: Colors.redAccent,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.6,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          if (injured.isNotEmpty)
+            Text(
+              'Sakat oyuncular (Ilk 11 icin kirmizi isaretli):',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 12,
+              ),
+            ),
+          for (final profile in injured)
+            Text(
+              '• ${profile.name} — takim: ${_teamNameOf(data, profile)} • '
+              'sakatlik tarihi ${profile.injuryDateText} • '
+              'sure ${profile.injuryDurationDays} gun • '
+              'tahmini donus ${profile.injuryEndText} • '
+              'kalan ${profile.injuredDaysRemaining} gun',
+              style: const TextStyle(
+                color: Color(0xffffc7c7),
+                fontSize: 11.5,
+                height: 1.35,
+              ),
+            ),
+          if (banned.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Cezali oyuncular: ${banned.map((p) => '${p.name} (${p.suspendedMatchesRemaining} mac)').join(', ')}',
+              style: const TextStyle(
+                color: Color(0xffffd9a1),
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _teamNameOf(SavedGameData data, PlayerProfile profile) {
+    for (final team in data.activeTeams) {
+      if (team.playerIds.contains(profile.id)) {
+        return team.name;
+      }
+    }
+    return 'Serbest oyuncu';
+  }
+
   Widget _teamSummary(SavedGameData data) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: _panelDecoration(),
       child: ListView(
         children: [
+          _preMatchUnavailableNotice(data),
           Row(
             children: [
               Container(
@@ -4061,7 +4175,7 @@ class _SetupScreenState extends State<SetupScreen> {
               const SizedBox(width: 10),
               const Expanded(
                 child: Text(
-                  'كشكول الفريقين — التشكيلة والطقم',
+                  'Iki takimin ozeti — kadro ve forma',
                   style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
                 ),
               ),
@@ -5125,8 +5239,31 @@ class _SetupScreenState extends State<SetupScreen> {
                           allowedRoles.contains(team.roleByPlayerId[profile.id])
                           ? team.roleByPlayerId[profile.id]!
                           : allowedRoles.first;
-                      return SizedBox(
-                        height: 44,
+                      // An injured player is painted red in the squad list so
+                      // he is impossible to miss before kick-off; a suspended
+                      // one is amber (Gereksinim: sakat oyuncular kirmizi,
+                      // cezali oyuncular turuncu gorunur).
+                      final injured = profile.isInjured;
+                      final banned = profile.isSuspended;
+                      return Container(
+                        key: ValueKey(profile.id),
+                        padding: const EdgeInsets.symmetric(vertical: 3),
+                        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: injured
+                              ? const Color(0xff5c1717).withValues(alpha: 0.55)
+                              : banned
+                              ? const Color(0xff5c4a12).withValues(alpha: 0.45)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: injured
+                                ? Colors.redAccent
+                                : banned
+                                ? Colors.orangeAccent
+                                : Colors.transparent,
+                          ),
+                        ),
                         child: Row(
                           children: [
                             Checkbox(
@@ -5168,13 +5305,40 @@ class _SetupScreenState extends State<SetupScreen> {
                                     profile.name,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(fontSize: 13),
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: injured
+                                          ? Colors.redAccent.shade100
+                                          : banned
+                                          ? Colors.orangeAccent
+                                          : Colors.white,
+                                      fontWeight:
+                                          injured || banned
+                                          ? FontWeight.w900
+                                          : FontWeight.w400,
+                                      decoration: injured
+                                          ? TextDecoration.lineThrough
+                                          : null,
+                                    ),
                                   ),
                                   Text(
-                                    'OVR:${profile.overallRating.toStringAsFixed(0)} DY:${profile.dayaniklilikGucu.toStringAsFixed(0)} ZK:${profile.zekaGucu.toStringAsFixed(0)}',
-                                    style: const TextStyle(
+                                    injured
+                                        ? 'SAKAT • ${profile.injuredDaysRemaining} gun '
+                                              '(${profile.injuryDateText} → ${profile.injuryEndText})'
+                                        : banned
+                                        ? 'CEZALI • ${profile.suspendedMatchesRemaining} mac'
+                                        : 'OVR:${profile.overallRating.toStringAsFixed(0)} '
+                                              'DY:${profile.dayaniklilikGucu.toStringAsFixed(0)} '
+                                              'ZK:${profile.zekaGucu.toStringAsFixed(0)}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
                                       fontSize: 9,
-                                      color: Colors.white38,
+                                      color: injured
+                                          ? Colors.redAccent.shade100
+                                          : banned
+                                          ? Colors.orangeAccent
+                                          : Colors.white38,
                                     ),
                                   ),
                                 ],

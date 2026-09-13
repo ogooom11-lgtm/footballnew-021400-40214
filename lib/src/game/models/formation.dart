@@ -321,15 +321,15 @@ const playableFormationTypes = [
 ];
 
 /// Tactical family of a formation, used by the picker filter/sort
-/// (مطلب فرز التشكيلات).
+/// (Gereksinim).
 enum FormationFamily { defensive, balanced, attacking, midfieldHeavy }
 
 extension FormationFamilyInfo on FormationFamily {
   String get label => switch (this) {
-        FormationFamily.defensive => 'دفاعي',
-        FormationFamily.balanced => 'متوازن',
-        FormationFamily.attacking => 'هجومي',
-        FormationFamily.midfieldHeavy => 'وسط قوي',
+        FormationFamily.defensive => 'Defansif',
+        FormationFamily.balanced => 'Dengeli',
+        FormationFamily.attacking => 'Hucum',
+        FormationFamily.midfieldHeavy => 'Guclu orta saha',
       };
 }
 

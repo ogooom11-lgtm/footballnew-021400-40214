@@ -55,12 +55,16 @@ class TacticalEngine {
       playState,
     );
     final compactness = measureCompactness(team);
-    final targetCompactness = targetCompactnessFor(
+    var targetCompactness = targetCompactnessFor(
       playState,
       style,
       scoreUrgency,
     );
-    final lineHeight = lineHeightFor(
+    // The human "double defence" key must really dig the block in.
+    if (engine.doubleDefenseActiveFor(team.id)) {
+      targetCompactness = (targetCompactness + 0.10).clamp(0.18, 0.95).toDouble();
+    }
+    var lineHeight = lineHeightFor(
       playState,
       style,
       ballZone,
@@ -68,6 +72,13 @@ class TacticalEngine {
       riskLevel,
       ballAdvance,
     );
+    // Double defence drops the line; double press lifts it and hunts higher.
+    if (engine.doubleDefenseActiveFor(team.id)) {
+      lineHeight = (lineHeight - 0.07).clamp(0.10, 0.62).toDouble();
+    } else if (engine.doublePressActiveFor(team.id) &&
+        playState.outOfPossession) {
+      lineHeight = (lineHeight + 0.06).clamp(0.10, 0.62).toDouble();
+    }
     final defensiveLineX = defensiveLineXFor(
       team,
       playState,
@@ -233,12 +244,24 @@ class TacticalEngine {
     var height = switch (playState) {
       TeamPlayState.possession => 0.40,
       TeamPlayState.attackingTransition => 0.42,
-      TeamPlayState.organizedDefense => 0.30,
-      TeamPlayState.defensiveTransition => 0.33,
-      TeamPlayState.pressing => 0.44,
+      TeamPlayState.organizedDefense => 0.26,
+      TeamPlayState.defensiveTransition => 0.28,
+      TeamPlayState.pressing => 0.40,
     };
-    // The block follows the ball's depth.
-    height += (ballAdvance - 0.5) * 0.34;
+    // The block follows the ball's depth — but only when WE have the ball.
+    // A defending team never walks up the pitch to squeeze the line: it
+    // drops towards its own goal with the ball (
+
+    if (playState.inPossession) {
+      height += (ballAdvance - 0.5) * 0.34;
+      // The line only pushes up when the ball is in the opponent half;
+      // a back line camped in its own third never steps out.
+      if (ballAdvance < 0.5) {
+        height -= (0.5 - ballAdvance) * 0.24;
+      }
+    } else {
+      height -= (0.5 - ballAdvance.clamp(0.0, 1.0)) * 0.22;
+    }
     // Style bias (defensive line factor around 1.0).
     height += (style.defensiveLineFactor - 1.0) * 0.16;
     // Danger, result and risk adjustments.
@@ -264,16 +287,29 @@ class TacticalEngine {
         ? GameConstants.leftBound
         : GameConstants.rightBound;
     var lineFraction = lineHeight;
-    // The line never advances past the ball while defending.
-    if (playState.outOfPossession) {
-      lineFraction = math.min(lineFraction, ballAdvance + 0.10);
+    if (playState.inPossession) {
+      // We are attacking: the line may only be high while the ball really
+      // is in the opponent half. Otherwise it stays behind the halfway line
+      // so the defence is never caught with the ball behind it.
+      final cap = ballAdvance >= 0.5 ? 0.62 : 0.44;
+      lineFraction = math.min(lineFraction, cap);
+    } else {
+      // We are defending: the line lives goal-side of the ball. The player
+      // on the ball (and anyone running at us) must never be ahead of the
+      // last line — that was the wrong offside line.
+      lineFraction = math.min(lineFraction, ballAdvance - 0.03);
+      // When the opponent is already attacking our half, drop even deeper:
+      // retreat with the ball instead of stepping out.
+      if (ballAdvance < 0.46) {
+        lineFraction = math.min(lineFraction, ballAdvance - 0.06);
+      }
     }
     // In the critical zone the line is pinned: it holds and protects the
     // goal instead of stepping out.
     if (ballZone == DangerZone.critical) {
       lineFraction = math.min(lineFraction, 0.24);
     }
-    lineFraction = lineFraction.clamp(0.10, 0.66).toDouble();
+    lineFraction = lineFraction.clamp(0.08, 0.62).toDouble();
     return ownGoalX + d * GameConstants.pitchWidth * lineFraction;
   }
 

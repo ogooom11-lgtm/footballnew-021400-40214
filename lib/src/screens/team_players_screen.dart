@@ -24,24 +24,24 @@ class TeamPlayersScreen extends StatefulWidget {
   State<TeamPlayersScreen> createState() => _TeamPlayersScreenState();
 }
 
-/// Sort keys of the players page (مطلب الفرز الكامل: القيمة، معدل النقاط،
-/// الأهداف، السرعة، الإنهاء...).
+/// Sort keys of the players page (
+/// ...).
 enum _PlayerSort {
-  name('الاسم'),
-  number('الرقم'),
-  marketValue('القيمة السوقية'),
-  averagePoints('معدل النقاط'),
-  totalPoints('مجموع النقاط'),
-  goals('الأهداف'),
-  assists('الصناعة'),
-  overall('التقييم العام'),
-  speed('السرعة'),
-  finishing('الإنهاء'),
-  shotPower('قوة التسديد'),
-  successfulPasses('التمريرات الناجحة'),
-  matchesPlayed('المباريات'),
-  stamina('التحمل'),
-  zeka('الذكاء');
+  name('Ad'),
+  number('Numara'),
+  marketValue('Piyasa degeri'),
+  averagePoints('Puan ort.'),
+  totalPoints('Toplam puan'),
+  goals('Goller'),
+  assists('Asist'),
+  overall('Genel degerlendirme'),
+  speed('Hiz'),
+  finishing('Bitiricilik'),
+  shotPower('Sut gucu'),
+  successfulPasses('Basarili paslar'),
+  matchesPlayed('Maclar'),
+  stamina('Dayaniklilik'),
+  zeka('Zeka');
 
   const _PlayerSort(this.label);
 
@@ -214,7 +214,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
             ),
           ),
           IconButton(
-            tooltip: _sortAscending ? 'تصاعدي' : 'تنازلي',
+            tooltip: _sortAscending ? 'Artan' : 'Azalan',
             onPressed: () => setState(() => _sortAscending = !_sortAscending),
             icon: Icon(
               _sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
@@ -239,7 +239,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
     // or M (loss).
     final recent = team.matchHistory.take(5).toList();
     if (recent.isEmpty) {
-      return 'لا توجد مباريات بعد';
+      return 'Henuz mac yok';
     }
     var streakType = '';
     var streak = 0;
@@ -255,32 +255,32 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
       }
     }
     final streakText = switch (streakType) {
-      'G' => streak >= 2 ? ' • $streak فوز متتالي' : '',
-      'M' => streak >= 2 ? ' • $streak خسائر متتالية' : '',
-      'B' => streak >= 2 ? ' • $streak تعادلات متتالية' : '',
+      'G' => streak >= 2 ? ' • $streak galibiyet serisi' : '',
+      'M' => streak >= 2 ? ' • $streak yenilgi serisi' : '',
+      'B' => streak >= 2 ? ' • $streak beraberlik serisi' : '',
       _ => '',
     };
     final badges = recent.map((record) {
       final kind = record.result.isEmpty ? '' : record.result[0];
       return switch (kind) {
-        'G' => 'ف',
-        'B' => 'ت',
-        'M' => 'خ',
-        _ => '؟',
+        'G' => 'G',
+        'B' => 'B',
+        'M' => 'M',
+        _ => '?',
       };
     }).join('-');
-    return 'آخر النتائج: $badges$streakText';
+    return 'Son sonuclar: $badges$streakText';
   }
 
   String _formatBigValue(double value) {
     if (value >= 1e9) {
       final b = value / 1e9;
       return b >= 100
-          ? b.toStringAsFixed(0) + ' مليار'
-          : b.toStringAsFixed(1) + ' مليار';
+          ? b.toStringAsFixed(0) + ' milyar'
+          : b.toStringAsFixed(1) + ' milyar';
     }
     if (value >= 1e6) {
-      return (value / 1e6).toStringAsFixed(0) + ' مليون';
+      return (value / 1e6).toStringAsFixed(0) + ' milyon';
     }
     return value.toStringAsFixed(0);
   }
@@ -317,7 +317,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                 child: DropdownButtonFormField<String>(
                   value: team.id,
                   isDense: true,
-                  decoration: const InputDecoration(labelText: 'اختر الفريق'),
+                  decoration: const InputDecoration(labelText: 'Takim sec'),
                   items: [
                     for (final item in data.activeTeams)
                       DropdownMenuItem(value: item.id, child: Text(item.name)),
@@ -344,21 +344,21 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                     ),
                   ),
                   Text(
-                    'اللاعبون: ${players.length} (حراس $keepers، أرضية $fielders) • '
-                    'ف${team.wins} ت${team.draws} خ${team.losses}',
+                    'Oyuncular: ${players.length} (kaleci $keepers, saha $fielders) • '
+                    'G${team.wins} B${team.draws} M${team.losses}',
                     style: const TextStyle(
                         color: Colors.white60, fontSize: 12),
                   ),
                   Text(
-                    'المالك: ${owner.isEmpty ? 'غير محدد' : owner.first.username}'
-                    '${team.country == 'غير محدد' ? '' : ' • ${team.country}'}',
+                    'Sahip: ${owner.isEmpty ? 'Belirtilmemis' : owner.first.username}'
+                    '${team.country == 'Belirtilmemis' ? '' : ' • ${team.country}'}',
                     style: const TextStyle(
                         color: Colors.white60, fontSize: 12),
                   ),
                 ],
               ),
               const Spacer(),
-              // Total value badge (مطلب: مجموع قيم اللاعبين على الفريق).
+              // Total value badge (Gereksinim).
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -374,7 +374,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                 child: Column(
                   children: [
                     const Text(
-                      'قيمة الفريق',
+                      'Takim degeri',
                       style: TextStyle(fontSize: 10, color: Colors.white60),
                     ),
                     Text(
@@ -393,7 +393,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                 OutlinedButton.icon(
                   onPressed: () => _deleteTeam(team),
                   icon: const Icon(Icons.delete_outline, size: 18),
-                  label: const Text('حذف الفريق'),
+                  label: const Text('Takimi sil'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.redAccent,
                     side: BorderSide(
@@ -405,8 +405,8 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
             ],
           ),
           const SizedBox(height: 4),
-          // Form + history summary (مطلب: الفريق يظهر نتيجة آخر مباراة أو
-          // سلسلة انتصارات، وبالضغط تظهر كل نتائجه).
+          // Form + history summary (
+
           Row(
             children: [
               Text(
@@ -417,7 +417,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                 TextButton(
                   onPressed: () => _showTeamHistory(team),
                   child: const Text(
-                    'عرض كل النتائج',
+                    'Tum sonuclari goster',
                     style: TextStyle(fontSize: 12),
                   ),
                 ),
@@ -426,7 +426,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                 onPressed: () => _openKitsManager(team),
                 icon: const Icon(Icons.checkroom, size: 15),
                 label: const Text(
-                  'الأطقم',
+                  'Formalar',
                   style: TextStyle(fontSize: 12),
                 ),
               ),
@@ -439,7 +439,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                         : null,
                     isDense: true,
                     decoration: const InputDecoration(
-                      labelText: 'دولة الفريق',
+                      labelText: 'Takim ulkesi',
                       isDense: true,
                     ),
                     items: [
@@ -468,11 +468,11 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xff102019),
-        title: Text('نتائج ${team.name}'),
+        title: Text('Sonuclar ${team.name}'),
         content: SizedBox(
           width: 460,
           child: team.matchHistory.isEmpty
-              ? const Text('لا توجد مباريات مسجلة')
+              ? const Text('Kayitli mac yok')
               : ListView.separated(
                   shrinkWrap: true,
                   itemCount: team.matchHistory.length,
@@ -494,13 +494,13 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                         ),
                       ),
                       title: Text(
-                        '${record.scoreText} ضد ${record.opponentName}',
+                        '${record.scoreText} — ${record.opponentName}',
                         style: const TextStyle(fontSize: 13),
                       ),
                       subtitle: Text(
-                        'استحواذ ${record.possessionPercent.toStringAsFixed(0)}% • '
-                        'تمرير ${record.successfulPasses}/${record.passes} • '
-                        'تسديد ${record.shots}',
+                        'Top %${record.possessionPercent.toStringAsFixed(0)} • '
+                        'Pas ${record.successfulPasses}/${record.passes} • '
+                        'Sut ${record.shots}',
                         style: const TextStyle(fontSize: 11),
                       ),
                     );
@@ -510,7 +510,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('إغلاق'),
+            child: const Text('Kapat'),
           ),
         ],
       ),
@@ -723,7 +723,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                           ),
                         ),
                       ),
-                      if (player.country != 'غير محدد') ...[
+                      if (player.country != 'Belirtilmemis') ...[
                         const SizedBox(width: 4),
                         Text(
                           player.country,
@@ -737,10 +737,10 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    '${role?.turkishName ?? 'بلا مركز'}'
-                    '${isStarter ? ' • أساسي' : ' • بديل'}'
-                    '${player.isSuspended ? ' • موقوف ${player.suspendedMatchesRemaining}م' : ''}'
-                    '${player.isInjured ? ' • مصاب ${player.injuredDaysRemaining}ي' : ''}',
+                    '${role?.turkishName ?? 'mevki yok'}'
+                    '${isStarter ? ' • ilk 11' : ' • yedek'}'
+                    '${player.isSuspended ? ' • cezali ${player.suspendedMatchesRemaining} mac' : ''}'
+                    '${player.isInjured ? ' • sakat ${player.injuredDaysRemaining} gun' : ''}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style:
@@ -749,13 +749,13 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      _miniStat('قيمة', player.marketValueText),
-                      _miniStat('أهداف', '${player.goals}'),
-                      _miniStat('صناعة', '${player.assists}'),
-                      _miniStat('معدل النقاط', avgPoints.toStringAsFixed(2)),
-                      _miniStat('سرعة', player.speedRating.toStringAsFixed(0)),
+                      _miniStat('Deger', player.marketValueText),
+                      _miniStat('Gol', '${player.goals}'),
+                      _miniStat('Asist', '${player.assists}'),
+                      _miniStat('Puan ort.', avgPoints.toStringAsFixed(2)),
+                      _miniStat('Hiz', player.speedRating.toStringAsFixed(0)),
                       _miniStat(
-                          'إنهاء', player.finishingRating.toStringAsFixed(0)),
+                          'Bitiricilik', player.finishingRating.toStringAsFixed(0)),
                     ],
                   ),
                 ],
@@ -763,22 +763,22 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
             ),
             if (widget.adminFullAccess)
               IconButton(
-                tooltip: 'تعديل القيم والإعدادات',
+                tooltip: 'Degerleri ve ayarlari duzenle',
                 onPressed: () => _editPlayerValues(player),
                 icon: const Icon(Icons.tune, color: Color(0xffffd34d)),
               ),
             IconButton(
-              tooltip: 'تعديل الاسم',
+              tooltip: 'Adi duzenle',
               onPressed: canEdit ? () => _editPlayerName(player) : null,
               icon: const Icon(Icons.edit, size: 20),
             ),
             IconButton(
-              tooltip: 'تعديل الرقم',
+              tooltip: 'Numarayi duzenle',
               onPressed: canEdit ? () => _editPlayerNumber(player) : null,
               icon: const Icon(Icons.tag, size: 20),
             ),
             IconButton(
-              tooltip: 'إخراج من الفريق',
+              tooltip: 'Takimdan cikar',
               onPressed: canEdit
                   ? () => _removePlayerFromTeam(data, team, player)
                   : null,
@@ -786,7 +786,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
             ),
             if (widget.adminFullAccess)
               IconButton(
-                tooltip: 'حذف اللاعب (الإدارة فقط)',
+                tooltip: 'Oyuncuyu sil (sadece yonetici)',
                 onPressed: () => _deletePlayer(player),
                 icon: const Icon(
                   Icons.delete_outline,
@@ -825,7 +825,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
   }
 
   /// Full player detail sheet: every goal and assist, match-by-match points,
-  /// which matches he stood out in (مطلب صفحة تفاصيل اللاعب).
+  /// which matches he stood out in (Gereksinim).
   Future<void> _openPlayerDetailSheet(
     SavedGameData data,
     SavedTeamProfile team,
@@ -878,7 +878,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                         ),
                         Text(
                           '${team.name} • ${player.country} • '
-                          'مباريات ${player.matchesPlayed} • دقائق '
+                          'Mac ${player.matchesPlayed} • dakika '
                           '${player.minutesPlayed}',
                           style: const TextStyle(
                             color: Colors.white60,
@@ -896,25 +896,25 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                 runSpacing: 8,
                 children: [
                   _detailChip('OVR', player.effectiveOverall.toStringAsFixed(0)),
-                  _detailChip('القيمة', player.marketValueText),
-                  _detailChip('أهداف', '${player.goals}'),
-                  _detailChip('صناعة', '${player.assists}'),
-                  _detailChip('معدل النقاط', avgPoints.toStringAsFixed(2)),
-                  _detailChip('مجموع النقاط', player.points.toStringAsFixed(1)),
-                  _detailChip('تسديد', '${player.shots}'),
-                  _detailChip('على المرمى', '${player.shotsOnTarget}'),
-                  _detailChip('تمرير ناجح', '${player.successfulPasses}'),
-                  _detailChip('مراوغات', '${player.successfulDribbles}'),
-                  _detailChip('قطع', '${player.tackles}'),
-                  _detailChip('إنقاذ', '${player.saves}'),
-                  _detailChip('بطاقات', 'ص${player.yellowCards} ح${player.redCards}'),
+                  _detailChip('Deger', player.marketValueText),
+                  _detailChip('Gol', '${player.goals}'),
+                  _detailChip('Asist', '${player.assists}'),
+                  _detailChip('Puan ort.', avgPoints.toStringAsFixed(2)),
+                  _detailChip('Toplam puan', player.points.toStringAsFixed(1)),
+                  _detailChip('Sut', '${player.shots}'),
+                  _detailChip('Kaleyi buldu', '${player.shotsOnTarget}'),
+                  _detailChip('Basarili pas', '${player.successfulPasses}'),
+                  _detailChip('Calimlar', '${player.successfulDribbles}'),
+                  _detailChip('Mudahale', '${player.tackles}'),
+                  _detailChip('Kurtaris', '${player.saves}'),
+                  _detailChip('Kartlar', 'S${player.yellowCards} K${player.redCards}'),
                 ],
               ),
               const SizedBox(height: 14),
               if (widget.adminFullAccess) ...[
                 Row(
                   children: [
-                    const Text('الجنسية:',
+                    const Text('Ulke:',
                         style: TextStyle(color: Colors.white70)),
                     const SizedBox(width: 8),
                     Expanded(
@@ -944,7 +944,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                     TextButton.icon(
                       onPressed: () => _addCountryDialog(),
                       icon: const Icon(Icons.add, size: 16),
-                      label: const Text('دولة جديدة'),
+                      label: const Text('Yeni ulke'),
                     ),
                   ],
                 ),
@@ -956,21 +956,21 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                     icon: const Icon(Icons.back_hand, size: 16),
                     label: Text(
                       player.isGoalkeeper
-                          ? 'تحويله لاعب أرضية'
-                          : 'تعيينه حارساً للمرمى',
+                          ? 'Saha oyuncusuna cevir'
+                          : 'Kaleye gecir',
                     ),
                   ),
                 ),
                 const Divider(height: 22),
               ],
               const Text(
-                'سجل المباريات — نقطة بنقطة',
+                'Mac kaydi — an be an',
                 style: TextStyle(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 6),
               if (player.matchHistory.isEmpty)
                 const Text(
-                  'لم يلعب مباريات بعد.',
+                  'Henuz mac oynamadi.',
                   style: TextStyle(color: Colors.white38),
                 )
               else
@@ -1018,21 +1018,21 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                '${record.scoreText} ضد ${record.opponentName} • '
-                                '${record.minutes} دقيقة'
-                                '${standout ? '  ⭐ مباراة مميزة' : ''}',
+                                '${record.scoreText} — ${record.opponentName} • '
+                                '${record.minutes} dakika'
+                                '${standout ? '  ⭐ yildiz mac' : ''}',
                                 style: const TextStyle(
                                     fontWeight: FontWeight.w700,
                                     fontSize: 12),
                               ),
                               Text(
-                                'أهداف ${record.goals} • صناعة ${record.assists} • '
-                                'تمرير ${record.successfulPasses}/${record.passes} • '
-                                'تسديد ${record.shotsOnTarget}/${record.shots} • '
-                                'قطع ${record.tackles} • إنقاذ ${record.saves}'
-                                '${record.yellowCards > 0 ? ' • صفراء ${record.yellowCards}' : ''}'
-                                '${record.redCards > 0 ? ' • حمراء ${record.redCards}' : ''}'
-                                '${record.injured ? ' • مصاب' : ''}',
+                                'Gol ${record.goals} • Asist ${record.assists} • '
+                                'Pas ${record.successfulPasses}/${record.passes} • '
+                                'Sut ${record.shotsOnTarget}/${record.shots} • '
+                                'Mudahale ${record.tackles} • Kurtaris ${record.saves}'
+                                '${record.yellowCards > 0 ? ' • sari ${record.yellowCards}' : ''}'
+                                '${record.redCards > 0 ? ' • kirmizi ${record.redCards}' : ''}'
+                                '${record.injured ? ' • sakat' : ''}',
                                 style: const TextStyle(
                                     fontSize: 11, color: Colors.white54),
                               ),
@@ -1085,21 +1085,21 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xff102019),
-        title: const Text('إضافة دولة'),
+        title: const Text('Ulke ekle'),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(labelText: 'اسم الدولة'),
+          decoration: const InputDecoration(labelText: 'Ulke adi'),
           onSubmitted: (value) => Navigator.of(context).pop(value),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('إلغاء'),
+            child: const Text('Iptal'),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('إضافة'),
+            child: const Text('Ekle'),
           ),
         ],
       ),
@@ -1113,14 +1113,14 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
     await _save();
   }
 
-  /// Gives a field player the goalkeeper job (مطلب: تعيين حارس بديل عند
-  /// إصابة الحارس أو طرده) — the current keeper moves to a field role.
+  /// Gives a field player the goalkeeper job (
+  /// ) — the current keeper moves to a field role.
   Future<void> _assignAsGoalkeeper(
     SavedTeamProfile team,
     PlayerProfile player,
   ) async {
     if (!widget.adminFullAccess) {
-      _showMessage('تعيين الحارس متاح للإدارة فقط');
+      _showMessage('Kaleci atama sadece yoneticide');
       return;
     }
     setState(() {
@@ -1138,7 +1138,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
     await _save();
     if (mounted) {
       Navigator.of(context).pop();
-      _showMessage('تم تحديث مركز الحارس');
+      _showMessage('Kaleci mevkisi guncellendi');
     }
   }
 
@@ -1253,9 +1253,9 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
   Future<void> _deletePlayer(PlayerProfile player) async {
     final data = _data;
     if (data == null) return;
-    // حذف اللاعب متاح فقط لحساب الإدارة (مطلب صريح).
+    // (Gereksinim).
     if (!widget.adminFullAccess) {
-      _showMessage('حذف اللاعب متاح فقط من حساب الإدارة');
+      _showMessage('Oyuncu silme sadece yonetici hesabinda');
       return;
     }
     final confirm = await showDialog<bool>(
@@ -1298,9 +1298,9 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
   Future<void> _deleteTeam(SavedTeamProfile team) async {
     final data = _data;
     if (data == null) return;
-    // حذف الفريق متاح فقط لحساب الإدارة (مطلب صريح).
+    // (Gereksinim).
     if (!widget.adminFullAccess) {
-      _showMessage('حذف الفريق متاح فقط من حساب الإدارة');
+      _showMessage('Takim silme sadece yonetici hesabinda');
       return;
     }
     if (data.activeTeams.length <= 1) {
@@ -1586,7 +1586,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
 
 
 /// Kits manager: choose one of the club kits or build a custom one with
-/// per-part colors (مطلب: قمصان أكثر بألوان مخصصة لكل فريق).
+/// per-part colors (Gereksinim).
 class _KitsManagerDialog extends StatefulWidget {
   const _KitsManagerDialog({required this.team, required this.onSaved});
 
@@ -1598,23 +1598,15 @@ class _KitsManagerDialog extends StatefulWidget {
 }
 
 class _KitsManagerDialogState extends State<_KitsManagerDialog> {
-  static const List<Color> _palette = [
-    Color(0xffe53935),
-    Color(0xffc1272d),
-    Color(0xff8a1538),
-    Color(0xffff7f00),
-    Color(0xffffd700),
-    Color(0xff006c35),
-    Color(0xff2ecc71),
-    Color(0xff75aadb),
-    Color(0xff21304d),
-    Color(0xff6a0dad),
-    Color(0xffff6fa5),
-    Color(0xff16a085),
-    Color(0xffffffff),
-    Color(0xff2c2c2c),
-    Color(0xff000000),
+  /// Colors available for a shirt / shorts / socks / number. They come from
+  /// [JerseyFactory.kitColorPalette] so new colors added from the manage page
+  /// are immediately usable here, and the team can always type its own hex
+  /// (Gereksinim: formalar icin yeni renkler eklenebilir).
+  List<Color> get _palette => [
+    ...JerseyFactory.kitColorPalette,
+    ..._extraColors,
   ];
+  final List<Color> _extraColors = [];
 
   @override
   Widget build(BuildContext context) {
@@ -1622,7 +1614,7 @@ class _KitsManagerDialogState extends State<_KitsManagerDialog> {
     final kits = team.jerseyKits;
     return AlertDialog(
       backgroundColor: const Color(0xff0c1a14),
-      title: Text('أطقم ${team.name}'),
+      title: Text('Formalar ${team.name}'),
       content: SizedBox(
         width: 520,
         child: Column(
@@ -1641,10 +1633,26 @@ class _KitsManagerDialogState extends State<_KitsManagerDialog> {
               ),
             ),
             const Divider(height: 24),
-            FilledButton.tonalIcon(
-              onPressed: _createCustomKit,
-              icon: const Icon(Icons.palette),
-              label: const Text('إنشاء طقم مخصص'),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: _createCustomKit,
+                  icon: const Icon(Icons.palette),
+                  label: const Text('Ozel forma olustur'),
+                ),
+                const SizedBox(width: 10),
+                OutlinedButton.icon(
+                  onPressed: _addCustomColorToPalette,
+                  icon: const Icon(Icons.colorize),
+                  label: const Text('Yeni renk ekle'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Formaya uzun basarak silebilirsin. Varsayilan formalar da silinebilir.',
+              style: TextStyle(color: Colors.white54, fontSize: 11),
             ),
           ],
         ),
@@ -1652,7 +1660,7 @@ class _KitsManagerDialogState extends State<_KitsManagerDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('إغلاق'),
+          child: const Text('Kapat'),
         ),
       ],
     );
@@ -1665,6 +1673,7 @@ class _KitsManagerDialogState extends State<_KitsManagerDialog> {
         setState(() => widget.team.activeKitIndex = index);
         widget.onSaved();
       },
+      onLongPress: () => _confirmDeleteKit(index),
       child: Container(
         width: 108,
         padding: const EdgeInsets.all(8),
@@ -1713,10 +1722,161 @@ class _KitsManagerDialogState extends State<_KitsManagerDialog> {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 10),
             ),
+            const SizedBox(height: 2),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  active ? 'SECILI' : 'Sec',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    color: active
+                        ? const Color(0xffffd34d)
+                        : Colors.white38,
+                  ),
+                ),
+                InkWell(
+                  onTap: () => _confirmDeleteKit(index),
+                  child: const Padding(
+                    padding: EdgeInsets.all(2),
+                    child: Icon(
+                      Icons.delete_outline,
+                      size: 16,
+                      color: Colors.redAccent,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
     );
+  }
+
+  /// Deleting a kit: a custom kit disappears completely, a virtual (default)
+  /// kit is remembered in [SavedTeamProfile.removedKitNames] so it never
+  /// comes back. The last remaining kit can never be deleted
+  /// (Gereksinim: varsayilan veya ozel forma silinebilir).
+  Future<void> _confirmDeleteKit(int index) async {
+    final team = widget.team;
+    if (team.jerseyKits.length <= 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Takimin en az bir formasi olmali — son forma silinemez.'),
+        ),
+      );
+      return;
+    }
+    final kit = team.jerseyKits[index];
+    final isDefault = JerseyFactory.defaultKits().any(
+      (defaultKit) => defaultKit.name == kit.name,
+    );
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xff101820),
+        title: Text('${kit.name} silinsin mi?'),
+        content: Text(
+          isDefault
+              ? 'Bu varsayilan forma takimdan silinecek ve bir daha gorunmeyecek.'
+              : 'Bu ozel forma tamamen silinecek.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Vazgec'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Sil'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+    setState(() {
+      team.jerseyKits = [...team.jerseyKits]..removeAt(index);
+      if (isDefault && !team.removedKitNames.contains(kit.name)) {
+        team.removedKitNames = [...team.removedKitNames, kit.name];
+      }
+      if (team.jerseyKits.isEmpty) {
+        team.jerseyKits = [JerseyFactory.defaultKits().first];
+        team.activeKitIndex = 0;
+      }
+      if (team.activeKitIndex >= team.jerseyKits.length) {
+        team.activeKitIndex = 0;
+      }
+    });
+    await widget.onSaved();
+  }
+
+  /// Lets the team type any hex color and adds it to the palette of the
+  /// dialog, so brand new shirt colors can be used straight away.
+  Future<void> _addCustomColorToPalette() async {
+    final controller = TextEditingController(text: '#1B5E20');
+    final color = await showDialog<Color>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xff102019),
+        title: const Text('Yeni renk ekle'),
+        content: SizedBox(
+          width: 320,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Renk kodunu #RRGGBB biciminde yaz.',
+                style: TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: controller,
+                decoration: const InputDecoration(labelText: '#RRGGBB'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Iptal'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final parsed = _parseHexColor(controller.text);
+              Navigator.of(dialogContext).pop(parsed);
+            },
+            child: const Text('Ekle'),
+          ),
+        ],
+      ),
+    );
+    if (color == null) {
+      return;
+    }
+    setState(() {
+      if (!_extraColors.contains(color)) {
+        _extraColors.add(color);
+      }
+    });
+  }
+
+  Color? _parseHexColor(String raw) {
+    var value = raw.trim().replaceAll('#', '');
+    if (value.length == 6) {
+      value = 'ff$value';
+    }
+    if (value.length != 8) {
+      return null;
+    }
+    final parsed = int.tryParse(value, radix: 16);
+    return parsed == null ? null : Color(parsed);
   }
 
   Future<void> _createCustomKit() async {
@@ -1726,13 +1886,13 @@ class _KitsManagerDialogState extends State<_KitsManagerDialog> {
     var socks = const Color(0xff21304d);
     var number = const Color(0xffffffff);
     var keeper = const Color(0xff2ecc71);
-    final nameController = TextEditingController(text: 'طقم مخصص');
+    final nameController = TextEditingController(text: 'Ozel forma');
     final saved = await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           backgroundColor: const Color(0xff102019),
-          title: const Text('طقم مخصص'),
+          title: const Text('Ozel forma'),
           content: SizedBox(
             width: 480,
             child: SingleChildScrollView(
@@ -1741,17 +1901,17 @@ class _KitsManagerDialogState extends State<_KitsManagerDialog> {
                 children: [
                   TextField(
                     controller: nameController,
-                    decoration: const InputDecoration(labelText: 'اسم الطقم'),
+                    decoration: const InputDecoration(labelText: 'Forma adi'),
                   ),
                   const SizedBox(height: 10),
-                  _colorRow('القميص', shirt, (c) => shirt = c,
+                  _colorRow('Forma', shirt, (c) => shirt = c,
                       setDialogState),
-                  _colorRow('الشورت', shorts, (c) => shorts = c,
+                  _colorRow('Sort', shorts, (c) => shorts = c,
                       setDialogState),
-                  _colorRow('الشراب', socks, (c) => socks = c, setDialogState),
-                  _colorRow('الرقم', number, (c) => number = c,
+                  _colorRow('Corap', socks, (c) => socks = c, setDialogState),
+                  _colorRow('Numara', number, (c) => number = c,
                       setDialogState),
-                  _colorRow('قميص الحارس', keeper, (c) => keeper = c,
+                  _colorRow('Kaleci formasi', keeper, (c) => keeper = c,
                       setDialogState),
                 ],
               ),
@@ -1760,11 +1920,11 @@ class _KitsManagerDialogState extends State<_KitsManagerDialog> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('إلغاء'),
+              child: const Text('Iptal'),
             ),
             FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('حفظ الطقم'),
+              child: const Text('Formayi kaydet'),
             ),
           ],
         ),
@@ -1776,7 +1936,7 @@ class _KitsManagerDialogState extends State<_KitsManagerDialog> {
         ...widget.team.jerseyKits,
         JerseyKit(
           name: nameController.text.trim().isEmpty
-              ? 'طقم مخصص'
+              ? 'Ozel forma'
               : nameController.text.trim(),
           shirtColor: shirt,
           shortsColor: shorts,

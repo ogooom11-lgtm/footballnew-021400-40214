@@ -173,7 +173,7 @@ class JerseyFactory {
           goalkeeperShirtColor: Color(0xffe040fb),
         ),
         const JerseyKit(
-          name: 'قطر العنابي',
+          name: 'Katar Bordo',
           shirtColor: Color(0xff8a1538),
           shortsColor: Color(0xffffffff),
           socksColor: Color(0xff8a1538),
@@ -181,7 +181,7 @@ class JerseyFactory {
           goalkeeperShirtColor: Color(0xff2ecc71),
         ),
         const JerseyKit(
-          name: 'البرازيل الذهبي',
+          name: 'Brezilya Altin',
           shirtColor: Color(0xffffd700),
           shortsColor: Color(0xff0033a0),
           socksColor: Color(0xffffffff),
@@ -189,7 +189,7 @@ class JerseyFactory {
           goalkeeperShirtColor: Color(0xff1a1a1a),
         ),
         const JerseyKit(
-          name: 'الأرجنتين السماوي',
+          name: 'Arjantin Gok Mavisi',
           shirtColor: Color(0xff75aadb),
           shortsColor: Color(0xff1a1a1a),
           socksColor: Color(0xffffffff),
@@ -197,7 +197,7 @@ class JerseyFactory {
           goalkeeperShirtColor: Color(0xffffa500),
         ),
         const JerseyKit(
-          name: 'ألمانيا الأبيض',
+          name: 'Almanya Beyaz',
           shirtColor: Color(0xffffffff),
           shortsColor: Color(0xff000000),
           socksColor: Color(0xffffffff),
@@ -205,7 +205,7 @@ class JerseyFactory {
           goalkeeperShirtColor: Color(0xff2ecc71),
         ),
         const JerseyKit(
-          name: 'فرنسا الأزرق',
+          name: 'Fransa Mavi',
           shirtColor: Color(0xff21304d),
           shortsColor: Color(0xffffffff),
           socksColor: Color(0xffd80031),
@@ -213,7 +213,7 @@ class JerseyFactory {
           goalkeeperShirtColor: Color(0xffffd700),
         ),
         const JerseyKit(
-          name: 'المغرب الأحمر',
+          name: 'Fas Kirmizi',
           shirtColor: Color(0xffc1272d),
           shortsColor: Color(0xff006233),
           socksColor: Color(0xffc1272d),
@@ -221,7 +221,7 @@ class JerseyFactory {
           goalkeeperShirtColor: Color(0xffdddddd),
         ),
         const JerseyKit(
-          name: 'مصر الفراونة',
+          name: 'Misir Kirmizi',
           shirtColor: Color(0xffce1126),
           shortsColor: Color(0xffffffff),
           socksColor: Color(0xffce1126),
@@ -229,7 +229,7 @@ class JerseyFactory {
           goalkeeperShirtColor: Color(0xff3498db),
         ),
         const JerseyKit(
-          name: 'برتقالي صارخ',
+          name: 'Keskin Turuncu',
           shirtColor: Color(0xffff7f00),
           shortsColor: Color(0xff1a1a1a),
           socksColor: Color(0xffff7f00),
@@ -237,7 +237,7 @@ class JerseyFactory {
           goalkeeperShirtColor: Color(0xff8e44ad),
         ),
         const JerseyKit(
-          name: 'بنفسجي ملكي',
+          name: 'Kraliyet Moru',
           shirtColor: Color(0xff6a0dad),
           shortsColor: Color(0xff2c003e),
           socksColor: Color(0xff6a0dad),
@@ -245,7 +245,7 @@ class JerseyFactory {
           goalkeeperShirtColor: Color(0xff00c853),
         ),
         const JerseyKit(
-          name: 'وردي الأناقة',
+          name: 'Sik Pembe',
           shirtColor: Color(0xffff6fa5),
           shortsColor: Color(0xff2c2c2c),
           socksColor: Color(0xffff6fa5),
@@ -253,7 +253,7 @@ class JerseyFactory {
           goalkeeperShirtColor: Color(0xff16a085),
         ),
         const JerseyKit(
-          name: 'سعودي أخضر',
+          name: 'Suudi Yesili',
           shirtColor: Color(0xff006c35),
           shortsColor: Color(0xffffffff),
           socksColor: Color(0xff006c35),
@@ -262,15 +262,67 @@ class JerseyFactory {
         ),
       ];
 
-  static List<JerseyKit> completeKits(Iterable<JerseyKit>? saved) {
+  /// Rebuilds the kit list of a team: the saved kits first, then every
+  /// default kit that the team (or the admin) did NOT delete.
+  /// [removed] holds the names of the default kits that must stay deleted,
+  /// so a deleted virtual kit never comes back after a reload
+  /// (Gereksinim: yonetici varsayilan formayi silebilir).
+  static List<JerseyKit> completeKits(
+    Iterable<JerseyKit>? saved, {
+    Iterable<String> removed = const <String>[],
+  }) {
+    final removedNames = removed.toSet();
     final result = saved?.toList() ?? <JerseyKit>[];
     for (final kit in defaultKits()) {
+      if (removedNames.contains(kit.name)) {
+        continue;
+      }
       if (!result.any((existing) => existing.name == kit.name)) {
         result.add(kit);
       }
     }
+    // A team must always own at least one kit.
+    if (result.isEmpty) {
+      result.add(defaultKits().first);
+    }
     return result;
   }
+
+  /// Extra colors that can be used for shirts, shorts, socks and numbers.
+  /// The admin can extend this palette from the manage page
+  /// (Gereksinim: formalar icin yeni renkler eklenebilir).
+  static const List<Color> kitColorPalette = <Color>[
+    Color(0xffe53935),
+    Color(0xffc1272d),
+    Color(0xff8a1538),
+    Color(0xff7f1734),
+    Color(0xffff5c5c),
+    Color(0xffff7f00),
+    Color(0xffff9800),
+    Color(0xffffd700),
+    Color(0xffffd600),
+    Color(0xfff5deb3),
+    Color(0xff006c35),
+    Color(0xff008f5a),
+    Color(0xff2ecc71),
+    Color(0xff76ff03),
+    Color(0xff00acc1),
+    Color(0xff75aadb),
+    Color(0xff21304d),
+    Color(0xff0a4f93),
+    Color(0xff1a237e),
+    Color(0xff6a0dad),
+    Color(0xff9c27b0),
+    Color(0xffff6fa5),
+    Color(0xffe91e63),
+    Color(0xff16a085),
+    Color(0xffffffff),
+    Color(0xffb0bec5),
+    Color(0xff7f8c8d),
+    Color(0xff2c2c2c),
+    Color(0xff101820),
+    Color(0xff000000),
+  ];
 
   static List<JerseyKit> redTeamKits() => [
         const JerseyKit(
