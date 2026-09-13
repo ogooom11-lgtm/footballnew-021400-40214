@@ -103,7 +103,26 @@ class _GameScreenState extends State<GameScreen>
     if (_engine.activePenalty != null) {
       return;
     }
-    final blue = _engine.blueAiControlled
+    // The keeper who just caught the ball is not under control: the player
+    // must take his fingers off the keyboard first
+    // (Gereksinim).
+    var blueLocked =
+        _engine.keeperControlLockedFor(TeamId.blue) && !_engine.blueAiControlled;
+    var redLocked =
+        _engine.keeperControlLockedFor(TeamId.red) && !_engine.redAiControlled;
+    // The moment every key is released the keeper is his again and the
+    // control comes back in the same frame.
+    if (_pressed.isEmpty) {
+      if (blueLocked) {
+        _engine.releaseKeeperControlLock(TeamId.blue);
+        blueLocked = false;
+      }
+      if (redLocked) {
+        _engine.releaseKeeperControlLock(TeamId.red);
+        redLocked = false;
+      }
+    }
+    final blue = _engine.blueAiControlled || blueLocked
         ? Vec2.zero()
         : Vec2(
             (_isPressed(LogicalKeyboardKey.arrowRight) ? 1 : 0) -
@@ -111,7 +130,7 @@ class _GameScreenState extends State<GameScreen>
             (_isPressed(LogicalKeyboardKey.arrowDown) ? 1 : 0) -
                 (_isPressed(LogicalKeyboardKey.arrowUp) ? 1 : 0),
           );
-    final red = _engine.redAiControlled
+    final red = _engine.redAiControlled || redLocked
         ? Vec2.zero()
         : Vec2(
             (_isPressed(LogicalKeyboardKey.keyD) ? 1 : 0) -
@@ -149,13 +168,13 @@ class _GameScreenState extends State<GameScreen>
           size: 36,
         ),
         title: const Text(
-          'هل تريد الخروج من المباراة؟',
+          'Mactan cikmak istiyor musun?',
           textAlign: TextAlign.center,
         ),
         content: Text(
           _engine.finished
-              ? 'سيتم الرجوع إلى القائمة مع حفظ نتيجة المباراة.'
-              : 'المباراة لم تنتهِ بعد. إذا خرجت الآن فلن تُحفظ نتيجة هذه المباراة.',
+              ? 'Menuye donulecek ve mac sonucu kaydedilecek.'
+              : 'Mac henuz bitmedi. Simdi cikarsan bu macin sonucu kaydedilmez.',
           textAlign: TextAlign.center,
           style: const TextStyle(color: Colors.white70, height: 1.4),
         ),
@@ -164,7 +183,7 @@ class _GameScreenState extends State<GameScreen>
           OutlinedButton.icon(
             onPressed: () => Navigator.of(dialogContext).pop(false),
             icon: const Icon(Icons.sports_soccer),
-            label: const Text('لا، متابعة المباراة'),
+            label: const Text('Hayir, devam'),
           ),
           FilledButton.icon(
             style: FilledButton.styleFrom(
@@ -172,7 +191,7 @@ class _GameScreenState extends State<GameScreen>
             ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
             icon: const Icon(Icons.exit_to_app),
-            label: const Text('نعم، خروج'),
+            label: const Text('Evet, cik'),
           ),
         ],
       ),
@@ -213,7 +232,7 @@ class _GameScreenState extends State<GameScreen>
           _engine.seekReplaySeconds(3);
         } else if (key == LogicalKeyboardKey.space) {
           _engine.toggleReplayPlayback();
-        } else if (key == LogicalKeyboardKey.keyG) {
+        } else if (key == LogicalKeyboardKey.keyY) {
           final goals = _engine.reviewGoals;
           if (goals.isNotEmpty) {
             _engine.toggleGoalReview(goals.length - 1);
@@ -246,8 +265,11 @@ class _GameScreenState extends State<GameScreen>
         setState(() {});
         return;
       }
-      // Tactical override keys
-      if (key == LogicalKeyboardKey.numpad0 && !_engine.blueAiControlled) {
+      // Tactical override keys — letters now, not the old 0 and .
+      // F/G command the blue team, H/J the red team, and both are felt
+      // immediately on the pitch (
+
+      if (key == LogicalKeyboardKey.keyF && !_engine.blueAiControlled) {
         setState(() {
           _bluePressing = !_bluePressing;
           _blueDefending = false;
@@ -255,11 +277,15 @@ class _GameScreenState extends State<GameScreen>
             TeamId.blue,
             _bluePressing ? TeamMode.press : null,
           );
+          _showSwitchHint(
+            _bluePressing
+                ? 'Mavi: cift baski ACIK (F)'
+                : 'Mavi: cift baski KAPALI (F)',
+          );
         });
         return;
       }
-      if (key == LogicalKeyboardKey.numpadDecimal &&
-          !_engine.blueAiControlled) {
+      if (key == LogicalKeyboardKey.keyG && !_engine.blueAiControlled) {
         setState(() {
           _blueDefending = !_blueDefending;
           _bluePressing = false;
@@ -267,10 +293,15 @@ class _GameScreenState extends State<GameScreen>
             TeamId.blue,
             _blueDefending ? TeamMode.defense : null,
           );
+          _showSwitchHint(
+            _blueDefending
+                ? 'Mavi: cift defans ACIK (G)'
+                : 'Mavi: cift defans KAPALI (G)',
+          );
         });
         return;
       }
-      if (key == LogicalKeyboardKey.digit0 && !_engine.redAiControlled) {
+      if (key == LogicalKeyboardKey.keyH && !_engine.redAiControlled) {
         setState(() {
           _redPressing = !_redPressing;
           _redDefending = false;
@@ -278,16 +309,26 @@ class _GameScreenState extends State<GameScreen>
             TeamId.red,
             _redPressing ? TeamMode.press : null,
           );
+          _showSwitchHint(
+            _redPressing
+                ? 'Kirmizi: cift baski ACIK (H)'
+                : 'Kirmizi: cift baski KAPALI (H)',
+          );
         });
         return;
       }
-      if (key == LogicalKeyboardKey.backquote && !_engine.redAiControlled) {
+      if (key == LogicalKeyboardKey.keyJ && !_engine.redAiControlled) {
         setState(() {
           _redDefending = !_redDefending;
           _redPressing = false;
           _engine.setTacticalOverride(
             TeamId.red,
             _redDefending ? TeamMode.defense : null,
+          );
+          _showSwitchHint(
+            _redDefending
+                ? 'Kirmizi: cift defans ACIK (J)'
+                : 'Kirmizi: cift defans KAPALI (J)',
           );
         });
         return;
@@ -537,6 +578,60 @@ class _GameScreenState extends State<GameScreen>
                 fontWeight: FontWeight.w900,
                 fontSize: 13,
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// True while the human keeper is holding a caught ball and his keys must
+  /// be released before he can be controlled again.
+  bool _keeperControlLockVisible() {
+    final blueLocked = _engine.keeperControlLockedFor(TeamId.blue) &&
+        !_engine.blueAiControlled;
+    final redLocked =
+        _engine.keeperControlLockedFor(TeamId.red) && !_engine.redAiControlled;
+    return (blueLocked || redLocked) && _pressed.isNotEmpty;
+  }
+
+  Widget _keeperLockNotice() {
+    return Positioned(
+      top: 118,
+      left: 0,
+      right: 0,
+      child: IgnorePointer(
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xff1d3a5f), Color(0xff0d1f33)],
+              ),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: const Color(0xffffd34d), width: 1.6),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x55000000),
+                  blurRadius: 12,
+                  offset: Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.pan_tool_alt, color: Color(0xffffd34d), size: 20),
+                SizedBox(width: 10),
+                Text(
+                  'Kaleci topu tuttu — parmaklarini klavyeden cek, sonra kontrol sende',
+                  style: TextStyle(
+                    color: Color(0xffffd34d),
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12.5,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -821,6 +916,7 @@ class _GameScreenState extends State<GameScreen>
                   !_engine.finished)
                 _keeperDistributionControls(),
               if (_engine.banner != null) _banner(),
+              if (_keeperControlLockVisible()) _keeperLockNotice(),
               if (_switchModeHint != null) _switchModeHintWidget(),
               if (_engine.wallSelectionPending) _freeKickWallPanel(),
               if (_engine.restartKind != null &&
@@ -963,7 +1059,7 @@ class _GameScreenState extends State<GameScreen>
   }
 
   /// Team energy bar: when the squad is tired it is instantly visible in
-  /// the HUD (مطلب: الفريق يلي لاعبينه تعبانة يظهر ذلك).
+  /// the HUD (Gereksinim).
   Widget _teamEnergyBar(TeamGame team) {
     final outfield = team.players
         .where((player) => !player.isGoalkeeper && !player.isSentOff)
@@ -1001,7 +1097,7 @@ class _GameScreenState extends State<GameScreen>
           ),
           const SizedBox(height: 2),
           Text(
-            'طاقة ${(avg * 100).round()}%',
+            'Enerji ${(avg * 100).round()}%',
             style: TextStyle(
               fontSize: 9,
               color: color,
@@ -1014,7 +1110,7 @@ class _GameScreenState extends State<GameScreen>
   }
 
   /// Floating top scoreboard: modern live score + minute + kit swatches
-  /// (مطلب واجهة لعبة حديثة).
+  /// (Gereksinim).
   Widget _topScoreboard() {
     final minuteLabel = _engine.minute <= 0
         ? '0\''
@@ -1252,13 +1348,13 @@ class _GameScreenState extends State<GameScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              'ركلة حرة قريبة — هل تريد حائطاً بشرياً؟',
+              'Yakin serbest vurus — insan baraji kurmak ister misin?',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 8),
             const Text(
-              'اختر حتى خمسة لاعبين. يظهر طول كل لاعب لمساعدتك في الاختيار.',
+              'En fazla bes oyuncu sec. Secim icin her oyuncunun boyu gosterilir.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.white70),
             ),
@@ -1296,7 +1392,7 @@ class _GameScreenState extends State<GameScreen>
                     _engine.declineFreeKickWall();
                     setState(() {});
                   },
-                  child: const Text('لا، بدون حائط'),
+                  child: const Text('Hayir, barajsiz'),
                 ),
                 const SizedBox(width: 12),
                 FilledButton(
@@ -1305,7 +1401,7 @@ class _GameScreenState extends State<GameScreen>
                     _wallPlayerIds.clear();
                     setState(() {});
                   },
-                  child: Text('تأكيد الحائط (${_wallPlayerIds.length})'),
+                  child: Text('Baraji onayla (${_wallPlayerIds.length})'),
                 ),
               ],
             ),
@@ -1506,7 +1602,7 @@ class _GameScreenState extends State<GameScreen>
             const SizedBox(height: 4),
             if (!_engine.blueAiControlled)
               Text(
-                'Mavi: Numpad 0=Pres  . =Defans',
+                'Mavi: F = Cift Baski   G = Cift Defans',
                 style: TextStyle(
                   color: _bluePressing
                       ? Colors.orangeAccent
@@ -1518,7 +1614,7 @@ class _GameScreenState extends State<GameScreen>
               ),
             if (!_engine.redAiControlled)
               Text(
-                'Kirmizi: 0=Pres  `=Defans',
+                'Kirmizi: H = Cift Baski   J = Cift Defans',
                 style: TextStyle(
                   color: _redPressing
                       ? Colors.orangeAccent
@@ -1642,7 +1738,7 @@ class _GameScreenState extends State<GameScreen>
                         ),
                       ),
                       // Formation picker with family filter
-                      // (مطلب: فلترة التشكيلات حسب العائلة).
+                      // (Gereksinim).
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -1652,7 +1748,7 @@ class _GameScreenState extends State<GameScreen>
                               spacing: 4,
                               children: [
                                 ChoiceChip(
-                                  label: const Text('الكل',
+                                  label: const Text('Tumu',
                                       style: TextStyle(fontSize: 10)),
                                   selected: _subFamilyFilter == null,
                                   onSelected: (_) =>
@@ -1679,7 +1775,7 @@ class _GameScreenState extends State<GameScreen>
                               value: _pickerFormationValue(team),
                               isDense: true,
                               decoration: const InputDecoration(
-                                labelText: 'التشكيل',
+                                labelText: 'Kadro',
                               ),
                               items: [
                                 for (final formation
@@ -1725,10 +1821,10 @@ class _GameScreenState extends State<GameScreen>
                       _subSortDropdown(),
                       const SizedBox(width: 6),
                       // Emergency: field player in the keeper slot
-                      // (مطلب: تعيين لاعب أرضي حارساً).
+                      // (Gereksinim).
                       FilterChip(
                         label: const Text(
-                          'حارس طوارئ',
+                          'Acil kaleci',
                           style: TextStyle(fontSize: 10),
                         ),
                         selected: _emergencyKeeperMode,
@@ -2036,7 +2132,7 @@ class _GameScreenState extends State<GameScreen>
 
   /// Tapping a player highlights his slot and shows where he plays plus the
   /// fastest teammate and best finisher available
-  /// (مطلب: الضغط على اللاعب يظهر مركزه وأسرع زميل وأفضل bitiricilik).
+  /// (Gereksinim).
   void _showSlotInsight(TeamGame team, int slotIndex) {
     final player = team.players[slotIndex];
     final mates = team.players
@@ -2058,10 +2154,10 @@ class _GameScreenState extends State<GameScreen>
     setState(() {
       _subHighlightedSlot = slotIndex;
       _subSlotInfo =
-          '${player.profile.name} — مركزه: ${player.role.code} • '
-          'أسرع زميل: ${fastest?.profile.name ?? '-'} '
+          '${player.profile.name} — mevkisi: ${player.role.code} • '
+          'En hizli takim arkadasi: ${fastest?.profile.name ?? '-'} '
           '(${fastest?.profile.speedRating.toStringAsFixed(0) ?? '-'}) • '
-          'أفضل إنهاء: ${bestFinisher?.profile.name ?? '-'} '
+          'En iyi bitirici: ${bestFinisher?.profile.name ?? '-'} '
           '(${bestFinisher?.profile.finishingRating.toStringAsFixed(0) ?? '-'})';
     });
   }
@@ -2183,7 +2279,7 @@ class _GameScreenState extends State<GameScreen>
     return list.isEmpty ? all : list;
   }
 
-  /// Bench sorted by the chosen key (مطلب: قائمة البدلاء مرتبة).
+  /// Bench sorted by the chosen key (Gereksinim).
   List<(int, PlayerGame)> _sortedBenchPairs(TeamGame team) {
     final pairs = [for (var i = 0; i < team.bench.length; i++) (i, team.bench[i])];
     int compare((int, PlayerGame) a, (int, PlayerGame) b) {
@@ -2212,9 +2308,9 @@ class _GameScreenState extends State<GameScreen>
       style: const TextStyle(fontSize: 11, color: Colors.white70),
       dropdownColor: const Color(0xff102019),
       items: const [
-        DropdownMenuItem(value: 'rating', child: Text('ترتيب: الأعلى تقييماً')),
-        DropdownMenuItem(value: 'stamina', child: Text('ترتيب: الأعلى طاقة')),
-        DropdownMenuItem(value: 'position', child: Text('ترتيب: المركز')),
+        DropdownMenuItem(value: 'rating', child: Text('Siralama: en yuksek puan')),
+        DropdownMenuItem(value: 'stamina', child: Text('Siralama: en yuksek enerji')),
+        DropdownMenuItem(value: 'position', child: Text('Siralama: mevki')),
       ],
       onChanged: (value) {
         if (value != null) setState(() => _subBenchSort = value);
@@ -2222,8 +2318,8 @@ class _GameScreenState extends State<GameScreen>
     );
   }
 
-  /// Re-entry + sent-off-return section (مطلب: إعادة إدخال أي لاعب سبق
-  /// الخروج، حتى المصاب أو المطرود إذا لم يوجد بدلاء).
+  /// Re-entry + sent-off-return section (
+
   Widget _reentrySection(TeamGame team) {
     final canUseLog = team.substitutionsUsed < team.substitutionLimit;
     final benchEmpty = team.bench.isEmpty;
@@ -2251,7 +2347,7 @@ class _GameScreenState extends State<GameScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'إعادة إدخال من خرجوا سابقاً',
+              'Cikanlari geri al',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w900,
@@ -2264,8 +2360,8 @@ class _GameScreenState extends State<GameScreen>
                 team,
                 candidates[logIndex],
                 subtitle:
-                    'خرج د${candidates[logIndex].leftMatchMinute?.ceil() ?? '-'}'
-                    '${candidates[logIndex].profile.isUnavailable && !benchEmpty ? ' • متاح فقط بدون بدلاء' : ''}',
+                    'cikti: ${candidates[logIndex].leftMatchMinute?.ceil() ?? '-'}. dk'
+                    '${candidates[logIndex].profile.isUnavailable && !benchEmpty ? ' • sadece yedek yoksa oynar' : ''}',
                 enabled: canUseLog &&
                     (benchEmpty ||
                         !candidates[logIndex].profile.isUnavailable),
@@ -2279,7 +2375,7 @@ class _GameScreenState extends State<GameScreen>
               _reentryCard(
                 team,
                 entry.value,
-                subtitle: 'مطرود • عودة طارئة لمركزه',
+                subtitle: 'Atildi • acil geri donus',
                 enabled: true,
                 onReturn: () {
                   setState(() {
@@ -2308,7 +2404,7 @@ class _GameScreenState extends State<GameScreen>
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(
           content: Text(
-            'تعذر الإعادة: تأكد من تطابق مركز الحارس وعدم نفاد التبديلات',
+            'Geri alinamadi: kaleci mevkisi ve oyuncu degisikligi hakkini kontrol et',
           ),
         ),
       );
@@ -2347,7 +2443,7 @@ class _GameScreenState extends State<GameScreen>
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 textStyle: const TextStyle(fontSize: 10),
               ),
-              child: const Text('إعادة'),
+              child: const Text('Geri al'),
             ),
           ),
         ],
@@ -2356,15 +2452,38 @@ class _GameScreenState extends State<GameScreen>
   }
 
   Widget _matchBenchPlayerCard(PlayerGame player, {required bool enabled}) {
+    final profile = player.profile;
+    final injured = profile.isInjured;
+    final banned = profile.isSuspended;
+    // Unavailable players are painted red (injured) or amber (suspended) so
+    // the coach sees the problem before he tries to use them.
+    final unavailableText = injured
+        ? 'SAKAT • ${profile.injuredDaysRemaining} gun • '
+              '${profile.injuryDateText} → ${profile.injuryEndText}'
+        : banned
+        ? 'CEZALI • ${profile.suspendedMatchesRemaining} mac'
+        : null;
     final card = Container(
       margin: const EdgeInsets.only(bottom: 7),
       padding: const EdgeInsets.all(9),
       decoration: BoxDecoration(
         color: enabled
             ? Colors.white.withValues(alpha: 0.045)
+            : injured
+            ? const Color(0xff5c1717).withValues(alpha: 0.55)
+            : banned
+            ? const Color(0xff5c4a12).withValues(alpha: 0.45)
             : Colors.redAccent.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: enabled ? Colors.white12 : Colors.redAccent),
+        border: Border.all(
+          color: enabled
+              ? Colors.white12
+              : injured
+              ? Colors.redAccent
+              : banned
+              ? Colors.orangeAccent
+              : Colors.redAccent,
+        ),
       ),
       child: Row(
         children: [
@@ -2391,8 +2510,19 @@ class _GameScreenState extends State<GameScreen>
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
                 Text(
-                  '${player.role.code} • OVR ${player.profile.effectiveOverall.round()} • Enerji ${(player.stamina * 100).round()}%',
-                  style: const TextStyle(color: Colors.white54, fontSize: 9),
+                  unavailableText ??
+                      '${player.role.code} • OVR ${player.profile.effectiveOverall.round()} • Enerji ${(player.stamina * 100).round()}%',
+                  style: TextStyle(
+                    color: unavailableText == null
+                        ? Colors.white54
+                        : injured
+                        ? Colors.redAccent.shade100
+                        : Colors.orangeAccent,
+                    fontSize: 9,
+                    fontWeight: unavailableText == null
+                        ? FontWeight.w400
+                        : FontWeight.w900,
+                  ),
                 ),
               ],
             ),
@@ -2731,7 +2861,7 @@ class _GameScreenState extends State<GameScreen>
                   ),
                   const SizedBox(width: 6),
                   // Replay speed: slow motion to fast forward
-                  // (مطلب تبطيئ العرض وتسريعه).
+
                   for (final speed in const [0.25, 0.5, 1.0, 2.0])
                     Padding(
                       padding: const EdgeInsets.only(left: 4),
@@ -2812,7 +2942,7 @@ class _GameScreenState extends State<GameScreen>
                       Padding(
                         padding: const EdgeInsets.only(top: 2),
                         child: Text(
-                          'نافذة الحضور: ${_presenceWindowText(targetPlayer)}',
+                          'Sahada kalma: ${_presenceWindowText(targetPlayer)}',
                           style: const TextStyle(
                             fontSize: 10,
                             color: Color(0xffb388ff),
@@ -3122,17 +3252,17 @@ class _GameScreenState extends State<GameScreen>
   }
 
   /// On-pitch presence window of a player (enter/left minutes) for the VAR
-  /// panel (مطلب: VAR يعرض نافذة وجود اللاعب على أرضية الملعب).
+  /// panel (VAR: oyuncu: saha).
   String _presenceWindowText(PlayerGame player) {
     final entered = player.enteredMatchMinute;
     final left = player.leftMatchMinute;
     if (player.isSentOff) {
-      return "دخول د${entered.ceil()} • خرج د${left?.ceil() ?? '?'} (طرد)";
+      return "giris ${entered.ceil()}. dk • cikis ${left?.ceil() ?? '?'}. dk (kirmizi kart)";
     }
     if (left != null) {
-      return "دخول د${entered.ceil()} • خرج د${left.ceil()} (تبديل)";
+      return "giris ${entered.ceil()}. dk • cikis ${left.ceil()}. dk (degisiklik)";
     }
-    return "على أرضية الملعب منذ د${entered.ceil()}";
+    return "${entered.ceil()}. dakikadan beri sahada";
   }
 
   Color _timelineEventColor(String kind) => switch (kind) {
@@ -3258,17 +3388,17 @@ class _GameScreenState extends State<GameScreen>
               const SizedBox(height: 10),
               if (_engine.shootout != null)
                 Text(
-                  'الترجيح: الأزرق ${_engine.shootout!.goalsFor(TeamId.blue)} - '
-                  '${_engine.shootout!.goalsFor(TeamId.red)} الأحمر',
+                  'Penaltilar: Mavi ${_engine.shootout!.goalsFor(TeamId.blue)} - '
+                  '${_engine.shootout!.goalsFor(TeamId.red)} Kirmizi',
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
               const SizedBox(height: 10),
 
               // ---- Events: goals and cards with minutes --------------
-              _summarySectionTitle('أهداف وبطاقات بالدقائق'),
+              _summarySectionTitle('Dakika dakika goller ve kartlar'),
               if (events.isEmpty)
                 const Text(
-                  'لا أحداث',
+                  'Olay yok',
                   style: TextStyle(color: Colors.white38),
                 )
               else
@@ -3312,15 +3442,15 @@ class _GameScreenState extends State<GameScreen>
 
               // ---- Cards per player ---------------------------------
               if (_engine.disciplinaryEvents.isNotEmpty) ...[
-                _summarySectionTitle('مذكرة البطاقات'),
+                _summarySectionTitle('Kart notlari'),
                 ..._engine.disciplinaryEvents.map((event) {
                   final isRed =
                       event.card == 'red' || event.card == 'secondYellow';
                   final label = event.card == 'secondYellow'
-                      ? 'صفراء ثانية = حمراء'
+                      ? 'Ikinci sari = kirmizi'
                       : isRed
-                          ? 'حمراء'
-                          : 'صفراء';
+                          ? 'kirmizi'
+                          : 'sari';
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 1),
                     child: Row(
@@ -3336,8 +3466,8 @@ class _GameScreenState extends State<GameScreen>
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            '${event.playerName} — $label د${event.minute}'
-                            '${event.suspensionMatches > 0 ? ' • إيقاف ${event.suspensionMatches}م' : ''}',
+                            '${event.playerName} — $label ${event.minute}. dk'
+                            '${event.suspensionMatches > 0 ? ' • ceza ${event.suspensionMatches} mac' : ''}',
                             style: const TextStyle(fontSize: 12),
                           ),
                         ),
@@ -3349,40 +3479,40 @@ class _GameScreenState extends State<GameScreen>
               ],
 
               // ---- Quick stats grid ----------------------------------
-              _summarySectionTitle('إحصائيات سريعة'),
+              _summarySectionTitle('Hizli istatistikler'),
               const SizedBox(height: 6),
               _statCompareRow(
-                'الاستحواذ',
+                'Topa sahip olma',
                 '${_possessionFor(TeamId.blue).toStringAsFixed(0)}%',
                 '${_possessionFor(TeamId.red).toStringAsFixed(0)}%',
               ),
               _statCompareRow(
-                'التمريرات (ناجحة)',
+                'Paslar (basarili)',
                 '${_engine.blueSuccessfulPasses}/${_engine.bluePasses}',
                 '${_engine.redSuccessfulPasses}/${_engine.redPasses}',
               ),
               _statCompareRow(
-                'التسديدات',
+                'Sutlar',
                 '${_engine.blueShots}',
                 '${_engine.redShots}',
               ),
               _statCompareRow(
-                'الأخطاء',
+                'Fauller',
                 '${_engine.blueTeam.players.fold<int>(0, (sum, p) => sum + p.matchFoulsCommitted)}',
                 '${_engine.redTeam.players.fold<int>(0, (sum, p) => sum + p.matchFoulsCommitted)}',
               ),
               _statCompareRow(
-                'البطاقات',
+                'Kartlar',
                 '${_engine.disciplinaryEvents.where((e) => e.teamId == TeamId.blue).length}',
                 '${_engine.disciplinaryEvents.where((e) => e.teamId == TeamId.red).length}',
               ),
               _statCompareRow(
-                'التصديات',
+                'Kurtarislar',
                 '${_engine.blueTeam.goalkeeper.matchSaves}',
                 '${_engine.redTeam.goalkeeper.matchSaves}',
               ),
               _statCompareRow(
-                'التبعيدات',
+                'Uzaklastirmalar',
                 '${_engine.blueTeam.players.fold<int>(0, (sum, p) => sum + p.matchClearances)}',
                 '${_engine.redTeam.players.fold<int>(0, (sum, p) => sum + p.matchClearances)}',
               ),
@@ -3395,11 +3525,11 @@ class _GameScreenState extends State<GameScreen>
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  'رجل المباراة: ${best.profile.name}  '
-                  'أهداف ${best.matchGoals} • تمرير ناجح '
+                  'Macin adami: ${best.profile.name}  '
+                  'Gol ${best.matchGoals} • basarili pas '
                   '${best.matchSuccessfulPasses}/${best.matchPasses} • '
-                  'تسديد ${best.matchShotsOnTarget}/${best.matchShots} • '
-                  'إنقاذ ${best.matchSaves}',
+                  'Sut ${best.matchShotsOnTarget}/${best.matchShots} • '
+                  'Kurtaris ${best.matchSaves}',
                   textAlign: TextAlign.center,
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
@@ -3413,7 +3543,7 @@ class _GameScreenState extends State<GameScreen>
                   FilledButton.icon(
                     onPressed: _showPlayerStatistics,
                     icon: const Icon(Icons.analytics_outlined),
-                    label: const Text('تفاصيل وإحصائيات جميع اللاعبين'),
+                    label: const Text('Tum oyuncularin detay ve istatistikleri'),
                   ),
                   FilledButton.tonalIcon(
                     onPressed: () {
@@ -3425,13 +3555,13 @@ class _GameScreenState extends State<GameScreen>
                       });
                     },
                     icon: const Icon(Icons.video_settings),
-                    label: const Text('فتح مركز تحكم VAR'),
+                    label: const Text('VAR kontrolunu ac'),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
               const Text(
-                'Esc: القائمة الرئيسية',
+                'Esc: ana menu',
                 style: TextStyle(color: Colors.white54, fontSize: 11),
               ),
             ],
@@ -3518,7 +3648,7 @@ class _GameScreenState extends State<GameScreen>
               children: [
                 Icon(Icons.analytics, color: Color(0xffffd34d)),
                 SizedBox(width: 10),
-                Text('إحصائيات اللاعبين الكاملة'),
+                Text('Oyuncularin tum istatistikleri'),
               ],
             ),
             content: SizedBox(
@@ -3530,7 +3660,7 @@ class _GameScreenState extends State<GameScreen>
                     controller: searchController,
                     decoration: const InputDecoration(
                       prefixIcon: Icon(Icons.search),
-                      labelText: 'ابحث عن لاعب',
+                      labelText: 'Oyuncu ara',
                       isDense: true,
                     ),
                     onChanged: (value) => setDialogState(
@@ -3640,7 +3770,7 @@ class _GameScreenState extends State<GameScreen>
             actions: [
               FilledButton(
                 onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('إغلاق'),
+                child: const Text('Kapat'),
               ),
             ],
           );
@@ -3658,7 +3788,9 @@ class _GameScreenState extends State<GameScreen>
         key == LogicalKeyboardKey.numpad1 ||
         key == LogicalKeyboardKey.numpad2 ||
         key == LogicalKeyboardKey.numpad3 ||
-        key == LogicalKeyboardKey.keyV;
+        key == LogicalKeyboardKey.keyV ||
+        key == LogicalKeyboardKey.keyF ||
+        key == LogicalKeyboardKey.keyG;
   }
 
   void _drainPressStamina(TeamId id, double dt) {
@@ -3673,7 +3805,9 @@ class _GameScreenState extends State<GameScreen>
         key == LogicalKeyboardKey.digit1 ||
         key == LogicalKeyboardKey.digit2 ||
         key == LogicalKeyboardKey.digit3 ||
-        key == LogicalKeyboardKey.keyK;
+        key == LogicalKeyboardKey.keyK ||
+        key == LogicalKeyboardKey.keyH ||
+        key == LogicalKeyboardKey.keyJ;
   }
 
   Widget _goalList(String title, List goals) {

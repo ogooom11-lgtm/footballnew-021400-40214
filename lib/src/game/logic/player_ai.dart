@@ -34,7 +34,7 @@ class PlayerAi {
 
   /// Sticky presser per team: the same player keeps the pressing job while
   /// he stays close enough, so the team never looks like everyone chasing
-  /// the carrier (مطلب: واحد فقط يضغط ولا يتغير كل لحظة).
+  /// the carrier (Gereksinim).
   final Map<TeamId, String> _stickyPresserIds = <TeamId, String>{};
 
   void update({
@@ -74,6 +74,24 @@ class PlayerAi {
     // During the kickoff everyone holds his position in his own half —
     // nobody advances past the halfway line until the ball is played.
     if (engine.restartKind == RestartKind.kickoff) {
+      return;
+    }
+    // Goal kick discipline: the players of the team taking it keep their
+    // positions (only one man walks beside the keeper for the short pass),
+    // the opponents clear the box and hold their block. Nobody crowds the
+    // halfway line and nobody attacks the keeper
+    // (Gereksinim).
+    if (engine.restartKind == RestartKind.goalKick) {
+      final receiveTarget = engine.goalKickReceiveTargetFor(player);
+      if (receiveTarget != null) {
+        engine.moveTowards(player, receiveTarget, 0.75, dt);
+        return;
+      }
+      if (engine.restartTeamId == team.id) {
+        return;
+      }
+      final retreat = _goalKickRetreatTarget(player, team, opponent, engine);
+      engine.moveTowards(player, retreat, 0.55, dt);
       return;
     }
     // During a corner the defenders man-mark the nearest attacker so the
@@ -189,7 +207,7 @@ class PlayerAi {
           ball.owner == null) {
         // A pass is travelling to THIS player: he moves onto the ball path
         // and collects it naturally
-        // (مطلب: اللاعب غير المُتحكَّم به يستلم الكرة بشكل طبيعي).
+        // (Gereksinim).
         finalTarget = _interceptionPoint(player, engine);
         force += 0.13;
       } else {
@@ -204,7 +222,7 @@ class PlayerAi {
                 player.role == PlayerRole.defensiveMidfielder)) {
           // A ball bouncing around our own box must be smashed away
           // immediately — defenders never dribble there
-          // (مطلب: يبعدو كل كرة بتجيهون تلقائي).
+          // (Gereksinim).
           finalTarget = _interceptionPoint(player, engine);
           force += 0.16;
         } else if (chase == player) {
@@ -254,8 +272,10 @@ class PlayerAi {
       }
     }
 
-    // 2) Stop the danger: the designated presser engages the carrier.
-    if (_isDesignatedPresser(player, team, carrier, context, engine)) {
+    // 2) Stop the danger: exactly one man engages the carrier and fights
+    // for the ball; with the double-press key a second man joins him.
+    if (_isDesignatedPresser(player, team, carrier, context, engine) ||
+        _isSecondPresser(player, team, carrier, context, engine)) {
       return DefensiveDuty.pressCarrier;
     }
 
@@ -269,7 +289,7 @@ class PlayerAi {
     }
 
     // 3.5) One centre back always locks onto the most advanced attacker so
-    // the striker is never free (مطلب: حدا يكون مسكر على المهاجم).
+    // the striker is never free (Gereksinim).
     if (role.group == RoleGroup.centralDefence) {
       final striker = _mostAdvancedOpponentAttacker(opponent, engine);
       if (striker != null && _isStrikerMarker(player, team, striker)) {
@@ -297,8 +317,26 @@ class PlayerAi {
     TacticalContext context,
     MatchEngine engine,
   ) {
-    PlayerGame? best;
-    var bestScore = -1.0;
+    final pressers = _presserRanking(team, carrier, context, engine);
+    if (pressers.isEmpty) {
+      return null;
+    }
+    final best = pressers.first;
+    _stickyPresserIds[team.id] = best.id;
+    return best;
+  }
+
+  /// The players in pressing order — first the man who attacks the ball,
+  /// then the man who closes the carrier down. Everybody else is a
+  /// zone player and never leaves his position to chase the ball
+  /// (Gereksinim).
+  List<PlayerGame> _presserRanking(
+    TeamGame team,
+    PlayerGame carrier,
+    TacticalContext context,
+    MatchEngine engine,
+  ) {
+    final scored = <(PlayerGame, double)>[];
     for (final player in team.players) {
       if (player.isGoalkeeper || player.isSentOff) {
         continue;
@@ -307,7 +345,8 @@ class PlayerAi {
       if (distance > 430) {
         continue;
       }
-      final stateBias = context.playState.rolePressBias(player.role, context.style);
+      final stateBias =
+          context.playState.rolePressBias(player.role, context.style);
       final reach = 1.0 - (distance / 430).clamp(0.0, 1.0);
       var score = stateBias * 1.4 + player.role.pressingPriority + reach * 0.8;
       // Sticky pressing: the current presser keeps the job unless someone
@@ -315,15 +354,14 @@ class PlayerAi {
       if (_stickyPresserIds[team.id] == player.id) {
         score += 0.55;
       }
-      if (score > bestScore) {
-        bestScore = score;
-        best = player;
-      }
+      // A man standing goal-side of the carrier is the natural closer.
+      final goalSide = ((carrier.pos.x - player.pos.x) * team.attackDirection)
+          .clamp(-200.0, 200.0);
+      score += goalSide / 900;
+      scored.add((player, score));
     }
-    if (best != null) {
-      _stickyPresserIds[team.id] = best.id;
-    }
-    return best;
+    scored.sort((a, b) => b.$2.compareTo(a.$2));
+    return scored.map((entry) => entry.$1).toList();
   }
 
   bool _isDesignatedPresser(
@@ -335,6 +373,28 @@ class PlayerAi {
   ) {
     final presser = _designatedPresser(team, carrier, context, engine);
     return presser == player;
+  }
+
+  /// The second man: he does not dive in at the ball, he closes the carrier
+  /// (or the nearest passing option) so the presser is never alone.
+  bool _isSecondPresser(
+    PlayerGame player,
+    TeamGame team,
+    PlayerGame carrier,
+    TacticalContext context,
+    MatchEngine engine,
+  ) {
+    final ranking = _presserRanking(team, carrier, context, engine);
+    if (ranking.length < 2) {
+      return false;
+    }
+    if (ranking.first == player || ranking[1] != player) {
+      return false;
+    }
+    // With the human double-press key the second man really commits; in the
+    // normal state he only supports from the inside.
+    return engine.secondPresserAllowedFor(team.id) ||
+        player.pos.distanceTo(carrier.pos) < 150;
   }
 
   /// The opponent's most advanced attacker (the striker to man-mark).
@@ -671,7 +731,7 @@ class PlayerAi {
     // Our keeper holds the ball: nobody crowds him — everyone spreads to
     // his shape, only the closest defender offers a short wide option just
     // outside the penalty area
-    // (مطلب: الحارس مرتاح ولا يهاجمه لاعبوه، فقط اقتراب من حد الجزاء).
+    // (kaleci).
     if (carrier.isGoalkeeper) {
       final teammates = team.players
           .where((mate) => !mate.isGoalkeeper && !mate.isSentOff)
@@ -701,7 +761,7 @@ class PlayerAi {
     // When the carrier drives down the wing in the final third, forward
     // players MUST attack the penalty area to support him — they never
     // stand behind offering back-passes
-    // (مطلب: المهاجمون يساندون ويدخلون منطقة الجزاء خصوصًا من الجناح).
+
     final wideAdvanced = _carrierWideAndAdvanced(carrier, team);
     final boxRunner = role == PlayerRole.striker ||
         role == PlayerRole.leftWing ||
@@ -839,7 +899,7 @@ class PlayerAi {
       return false;
     }
     // Wide by ROLE or by actual PITCH POSITION: a striker driving down the
-    // flank also triggers the box runs (مطلب المهاجم الرايح على الجناح).
+    // flank also triggers the box runs .
     if (carrier.role.isWide) {
       return true;
     }
@@ -934,7 +994,13 @@ class PlayerAi {
     }
     force -= (1.0 - player.stamina) * 0.22;
     force *= player.role.speedBias;
-    return force.clamp(0.45, 1.0).toDouble();
+    // The human tactical keys (press / defend) are felt immediately:
+    // pressing runs harder at the ball, defending drops and slows the
+    // block down .
+    force *= context.engine.tacticalIntensityFor(player.teamId);
+    // A player who just landed from a jump cannot explode into a sprint.
+    force *= player.landingFactor;
+    return force.clamp(0.30, 1.0).toDouble();
   }
 
   /// Man-marking target during a corner: the defender stands between the
@@ -999,7 +1065,7 @@ class PlayerAi {
     final context = engine.tacticalContextFor(team);
     // Own penalty box: any defender who somehow keeps the ball smashes it
     // up the pitch right away — zero risk in front of our own goal
-    // (مطلب: لا فجوات ولا مراوغة أمام المرمى).
+
     if (engine.isInPenaltyBox(player.pos, team.id) &&
         (player.role.isDefender ||
             player.role == PlayerRole.defensiveMidfielder) &&
@@ -1426,6 +1492,36 @@ class PlayerAi {
     return target;
   }
 
+  /// Where an opponent stands during the goal kick: outside the box, in his
+  /// own lane, holding the block — no crowding, no chasing the keeper.
+  Vec2 _goalKickRetreatTarget(
+    PlayerGame player,
+    TeamGame team,
+    TeamGame opponent,
+    MatchEngine engine,
+  ) {
+    final context = engine.tacticalContextFor(team);
+    final anchor = context.dynamicAnchor(player);
+    if (engine.isInPenaltyBox(anchor, opponent.id)) {
+      const boxDepth = 135.0;
+      const margin = 14.0;
+      final boxEdgeX = team.side == TeamSide.left
+          ? GameConstants.leftBound + boxDepth + margin
+          : GameConstants.rightBound - boxDepth - margin;
+      anchor.x = boxEdgeX;
+    }
+    if (engine.isInPenaltyBox(player.pos, opponent.id)) {
+      // Already inside: step straight out along x.
+      const boxDepth = 135.0;
+      const margin = 10.0;
+      final boxEdgeX = team.side == TeamSide.left
+          ? GameConstants.leftBound + boxDepth + margin
+          : GameConstants.rightBound - boxDepth - margin;
+      return Vec2(boxEdgeX, player.pos.y);
+    }
+    return anchor;
+  }
+
   Vec2 _keeperReleaseWaitTarget(
     PlayerGame player,
     TeamGame team,
@@ -1436,7 +1532,7 @@ class PlayerAi {
       // Opponent goal kick: nobody bunches at the halfway line any more.
       // Everyone holds a normal role lane; only the attacking line pulls
       // back — to just past the first third of the pitch — so the keeper
-      // has room to build up (مطلب ضربة المرمى).
+      // has room to build up (Gereksinim).
       final centerX = GameConstants.virtualWidth / 2;
       final ownHalfX = team.attackDirection == 1
           ? GameConstants.leftBound + GameConstants.pitchWidth * 0.42
@@ -1525,25 +1621,76 @@ class PlayerAi {
     return (ownThird || ownHalf) && engine.counterOpportunityFor(team, player);
   }
 
+  /// High-ball discipline: only the players who can genuinely reach the
+  /// ball may jump for it. The rest hold their positions, mark their man and
+  /// never abandon the shape to chase a ball they cannot head
+
+
   void _maybeJumpForHighBall(PlayerGame player, MatchEngine engine) {
     final ball = engine.ball;
     if (ball.owner != null || ball.heightMeters < 1.25) {
-      player.jumpBoostMeters = 0;
+      player.isAirborne = false;
+      player.jumpBoostMeters *= 0.85;
+      if (player.jumpBoostMeters < 0.01) {
+        player.jumpBoostMeters = 0;
+      }
       return;
     }
+    final team = engine.teamById(player.teamId);
     final close = player.pos.distanceTo(ball.pos) < 24;
     final nearHead =
         ball.heightMeters <= player.profile.heightMeters + 0.18 &&
         ball.heightMeters >= player.profile.heightMeters - 0.24;
-    if (close && nearHead) {
+    // Who is allowed to attack this ball? The closest player of each team
+    // (plus, while defending a delivery, the closest man-marker). Everybody
+    // else stays on his feet and keeps his zone.
+    final contestAllowed = _mayContestHighBall(player, team, engine);
+    if (close && nearHead && contestAllowed) {
+      final alreadyAirborne = player.isAirborne;
       player
         ..jumpBoostMeters = 0.10 + random.nextDouble() * 0.03
-        ..jumpAnimationTimer = 0.48;
+        ..jumpAnimationTimer = 0.48
+        ..isAirborne = true;
+      if (!alreadyAirborne) {
+        // Landing cost: he cannot sprint for a moment after coming down.
+        final springiness = (player.profile.zekaGucu / 100) * 0.10;
+        player.landingRecoveryTimer =
+            (0.55 - springiness).clamp(0.30, 0.60).toDouble();
+      }
     } else {
+      player.isAirborne = false;
       player.jumpBoostMeters *= 0.85;
       if (player.jumpBoostMeters < 0.01) {
         player.jumpBoostMeters = 0;
       }
     }
+  }
+
+  /// The players who may leave their position to attack a high ball: the
+  /// closest team-mate to the ball, and (defensively) the single marker who
+  /// owns the danger zone the ball is falling into.
+  bool _mayContestHighBall(
+    PlayerGame player,
+    TeamGame team,
+    MatchEngine engine,
+  ) {
+    final ball = engine.ball;
+    final closest = team.closestTo(ball.pos, includeGoalkeeper: false);
+    if (closest == player) {
+      return true;
+    }
+    if (!player.role.isDefender) {
+      return false;
+    }
+    for (final mate in team.players) {
+      if (mate == player || mate.isGoalkeeper || mate.isSentOff) {
+        continue;
+      }
+      if (mate.role.isDefender && mate.pos.distanceTo(ball.pos) <
+          player.pos.distanceTo(ball.pos) - 6) {
+        return false;
+      }
+    }
+    return player.pos.distanceTo(ball.pos) < 46;
   }
 }

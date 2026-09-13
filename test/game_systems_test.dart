@@ -22,6 +22,10 @@ import 'package:new_football/src/game/models/player_profile.dart';
 import 'package:new_football/src/game/models/shooting.dart';
 import 'package:new_football/src/game/models/team_profile.dart';
 import 'package:new_football/src/game/models/team_setup.dart';
+import 'package:new_football/src/game/logic/penalty_logic.dart';
+import 'package:new_football/src/game/tactics/tactical_engine.dart';
+import 'package:new_football/src/game/tactics/team_play_state.dart';
+import 'package:new_football/src/game/tactics/team_shape_kind.dart';
 import 'package:new_football/src/storage/roster_storage.dart';
 
 /// Builds a match setup from the default saved game (LIG MODU removed).
@@ -123,21 +127,69 @@ void main() {
 
       restored.advanceUnavailableStatusAfterTeamMatch();
       expect(restored.suspendedMatchesRemaining, 2);
-      expect(restored.injuredDaysRemaining, 5);
+      // A played match burns one real day of the injury, and one real day is
+      // worth 3-5 injury days (Gereksinim).
+      expect(
+        restored.injuredDaysRemaining,
+        math.max(0, 14 - player.injuryDaysPerRealDay),
+      );
+      expect(restored.injuryDaysPerRealDay, inInclusiveRange(3, 5));
     });
   });
 
   group('jersey kits', () {
-    test('includes the ten expanded color choices', () {
+    test('ships a wide palette of ready made kits', () {
       final kits = JerseyFactory.defaultKits();
-      expect(kits.length, 13);
-      expect(kits.map((kit) => kit.name).toSet().length, 13);
+      expect(kits.length, greaterThanOrEqualTo(13));
+      expect(kits.map((kit) => kit.name).toSet().length, kits.length);
     });
 
     test('old saved kits are expanded without duplicates', () {
       final oldKits = JerseyFactory.defaultKits().take(3);
       final expanded = JerseyFactory.completeKits(oldKits);
-      expect(expanded.length, 13);
+      final expected = JerseyFactory.defaultKits().length;
+      expect(expanded.length, expected);
+      expect(expanded.map((kit) => kit.name).toSet().length, expected);
+    });
+
+    test('a deleted virtual kit never comes back', () {
+      final deleted = JerseyFactory.defaultKits().first.name;
+      final expanded = JerseyFactory.completeKits(
+        JerseyFactory.defaultKits().skip(1).take(2),
+        removed: [deleted],
+      );
+      expect(expanded.any((kit) => kit.name == deleted), isFalse);
+      expect(expanded.length, JerseyFactory.defaultKits().length - 1);
+    });
+
+    test('a team always keeps at least one kit when everything is deleted',
+        () {
+      final expanded = JerseyFactory.completeKits(const [], removed: [
+        'Ic Saha (Ev)',
+        'Dis Saha (Deplasman)',
+        'Alternatif',
+      ]);
+      expect(expanded, isNotEmpty);
+    });
+
+    test('the shirt palette offers extra colors for new kits', () {
+      expect(JerseyFactory.kitColorPalette.length, greaterThanOrEqualTo(20));
+      expect(JerseyFactory.kitColorPalette.contains(const Color(0xff101820)),
+          isTrue);
+    });
+
+    test('removed kit names survive the JSON round trip', () {
+      final team = SavedTeamProfile.create(
+        ownerAccountId: 'owner',
+        name: 'Kitspor',
+        playerIds: const [],
+      )..removedKitNames = ['Alternatif'];
+      final restored = SavedTeamProfile.fromJson(team.toJson());
+      expect(restored.removedKitNames, contains('Alternatif'));
+      expect(
+        restored.jerseyKits.any((kit) => kit.name == 'Alternatif'),
+        isFalse,
+      );
     });
   });
 
@@ -377,8 +429,13 @@ void main() {
   });
 
   group('discipline and substitutions', () {
-    test('red cards always carry a two-match suspension', () {
-      expect(GameConstants.redCardSuspensionMatches, 2);
+    test('red cards always carry a suspension for the next match', () {
+      expect(GameConstants.redCardSuspensionMatches, greaterThanOrEqualTo(1));
+      final player = PlayerProfile.generated(
+        name: 'Kirmizi',
+        isGoalkeeper: false,
+      )..suspendedMatchesRemaining = GameConstants.redCardSuspensionMatches;
+      expect(player.isBanned, isTrue);
     });
 
     test('position swaps are free and injury bonus raises the limit', () {
@@ -786,28 +843,61 @@ void main() {
   });
 
   group('daily injury recovery', () {
-    test('injury days decrease one per real day', () {
+    test('one real day removes three to five injury days', () {
       final player = PlayerProfile.generated(name: 'Hasta', isGoalkeeper: false);
       final now = DateTime.now();
       player
-        ..injuredDaysRemaining = 10
+        ..injuredDaysRemaining = 20
         ..injuryUpdatedAt = now
             .subtract(const Duration(days: 3))
             .millisecondsSinceEpoch;
       expect(player.recoverInjuryDays(now), isTrue);
-      expect(player.injuredDaysRemaining, 7);
+      expect(player.injuredDaysRemaining, 20 - 3 * player.injuryDaysPerRealDay);
       // Same day again: no double recovery.
       expect(player.recoverInjuryDays(now), isFalse);
-      expect(player.injuredDaysRemaining, 7);
     });
 
-    test('injury timestamp survives JSON round trip', () {
+    test('the injury day speed stays inside the 3-5 band', () {
+      final player = PlayerProfile.generated(name: 'Hasta', isGoalkeeper: false);
+      expect(player.injuryDaysPerRealDay, inInclusiveRange(3, 5));
+      player.dayaniklilikGucu = 100;
+      expect(player.injuryDaysPerRealDay, 5);
+      player.dayaniklilikGucu = 1;
+      expect(player.injuryDaysPerRealDay, 3);
+    });
+
+    test('an injury registers its date, duration and end date', () {
+      final player = PlayerProfile.generated(name: 'Hasta', isGoalkeeper: false);
+      final start = DateTime(2026, 3, 1, 12);
+      player.registerInjury(days: 30, at: start);
+      expect(player.injuredDaysRemaining, 30);
+      expect(player.injuryDurationDays, 30);
+      expect(player.injuryStartedAt, start.millisecondsSinceEpoch);
+      expect(player.injuryDateText, '01.03.2026');
+      expect(player.injuryEndsAt, greaterThan(start.millisecondsSinceEpoch));
+      expect(player.injuryEndText, isNot('-'));
+      expect(player.injuryProgress, 0);
+    });
+
+    test('a healed injury clears its end date', () {
+      final player = PlayerProfile.generated(name: 'Hasta', isGoalkeeper: false);
+      final now = DateTime(2026, 3, 1);
+      player.registerInjury(days: 4, at: now);
+      expect(player.recoverInjuryDays(now.add(const Duration(days: 2))), isTrue);
+      expect(player.injuredDaysRemaining, 0);
+      expect(player.injuryEndsAt, 0);
+      expect(player.injuryEndText, '-');
+    });
+
+    test('injury fields survive JSON round trip', () {
       final player = PlayerProfile.generated(name: 'Hasta', isGoalkeeper: false)
-        ..injuredDaysRemaining = 5
-        ..injuryUpdatedAt = 123456789;
+        ..registerInjury(days: 12, at: DateTime(2026, 1, 2));
       final restored = PlayerProfile.fromJson(player.toJson());
-      expect(restored.injuredDaysRemaining, 5);
-      expect(restored.injuryUpdatedAt, 123456789);
+      expect(restored.injuredDaysRemaining, 12);
+      expect(restored.injuryDurationDays, 12);
+      expect(restored.injuryStartedAt, player.injuryStartedAt);
+      expect(restored.injuryEndsAt, player.injuryEndsAt);
+      expect(restored.injuryDateText, player.injuryDateText);
     });
   });
 
@@ -824,6 +914,369 @@ void main() {
       expect(player.isBanned, isTrue);
       player.banMatches = 0;
       expect(player.isBanned, isFalse);
+    });
+  });
+  group('offside line and defending discipline', () {
+    test('the defensive line retreats with the ball while defending', () {
+      const engine = TacticalEngine();
+      final setup = _testMatchSetup();
+      final match = MatchEngine(setup);
+      final blue = match.blueTeam;
+      // Ball deep in the blue half, red attacking: the blue block must sit
+      // goal-side of the ball, never in front of the carrier.
+      match.ball.pos = Vec2(GameConstants.leftBound + 120, 350);
+      final context = engine.evaluate(
+        engine: match,
+        team: blue,
+        playState: TeamPlayState.organizedDefense,
+        shapeKind: TeamShapeKind.defensive,
+      );
+      final ballFraction =
+          (match.ball.pos.x - GameConstants.leftBound) / GameConstants.pitchWidth;
+      final lineFraction =
+          (context.defensiveLineX - GameConstants.leftBound) /
+              GameConstants.pitchWidth;
+      expect(lineFraction, lessThanOrEqualTo(ballFraction));
+    });
+
+    test('the double defence key digs the block deeper than the press key',
+        () {
+      const engine = TacticalEngine();
+      final match = MatchEngine(_testMatchSetup());
+      final setup = _testMatchSetup();
+      final blue = match.blueTeam;
+      match.ball.pos = Vec2(GameConstants.virtualWidth / 2 + 60, 350);
+      match.setTacticalOverride(TeamId.blue, TeamMode.defense);
+      final deep = engine.evaluate(
+        engine: match,
+        team: blue,
+        playState: TeamPlayState.organizedDefense,
+        shapeKind: TeamShapeKind.defensive,
+      );
+      match.setTacticalOverride(TeamId.blue, TeamMode.press);
+      final high = engine.evaluate(
+        engine: match,
+        team: blue,
+        playState: TeamPlayState.organizedDefense,
+        shapeKind: TeamShapeKind.defensive,
+      );
+      expect(deep.lineHeight, lessThan(high.lineHeight));
+      expect(setup.mode, MatchMode.knockout);
+    });
+
+    test('the letter keys drive the tactical intensity', () {
+      final match = MatchEngine(_testMatchSetup());
+      expect(match.tacticalIntensityFor(TeamId.blue), 1.0);
+      match.setTacticalOverride(TeamId.blue, TeamMode.press);
+      expect(match.tacticalIntensityFor(TeamId.blue), greaterThan(1.0));
+      expect(match.secondPresserAllowedFor(TeamId.blue), isTrue);
+      match.setTacticalOverride(TeamId.blue, TeamMode.defense);
+      expect(match.tacticalIntensityFor(TeamId.blue), lessThan(1.0));
+      expect(match.secondPresserAllowedFor(TeamId.blue), isFalse);
+    });
+  });
+
+  group('goal kick discipline', () {
+    test('opponents are pushed out of the box during a goal kick', () {
+      final match = MatchEngine(_testMatchSetup());
+      final opponent = match.redTeam.players.firstWhere(
+        (player) => !player.isGoalkeeper,
+      );
+      // Put a red player right in front of the blue goal, then announce a
+      // blue goal kick: he must be moved out of the penalty area.
+      opponent.pos = Vec2(GameConstants.leftBound + 70, 350);
+      match.ball.pos = Vec2(GameConstants.leftBound + 58, 350);
+      match.ball.vel = Vec2.zero();
+      match.restartKind = RestartKind.goalKick;
+      match.restartTeamId = TeamId.blue;
+      expect(match.isGoalKickLockedAgainst(TeamId.red), isTrue);
+      match.tick(0.016);
+      expect(match.isInPenaltyBox(opponent.pos, TeamId.blue), isFalse);
+    });
+  });
+
+  group('possession duels', () {
+    test('duel strength follows balance, stamina, physique and intelligence',
+        () {
+      final weak = PlayerProfile.generated(
+        name: 'Zayif',
+        isGoalkeeper: false,
+      )
+        ..balanceRating = 30
+        ..zekaGucu = 20;
+      final strong = PlayerProfile.generated(
+        name: 'Guclu',
+        isGoalkeeper: false,
+      )
+        ..balanceRating = 92
+        ..zekaGucu = 95;
+      final weakGame = PlayerGame(
+        profile: weak,
+        teamId: TeamId.blue,
+        role: PlayerRole.attackingMidfielder,
+        number: 8,
+        position: Vec2(300, 300),
+      );
+      final strongGame = PlayerGame(
+        profile: strong,
+        teamId: TeamId.red,
+        role: PlayerRole.attackingMidfielder,
+        number: 6,
+        position: Vec2(320, 300),
+      );
+      expect(strongGame.duelStrength, greaterThan(weakGame.duelStrength));
+      expect(strongGame.zekaFactor, closeTo(0.95, 0.001));
+    });
+
+    test('losing the ball starts a short control cooldown', () {
+      final match = MatchEngine(_testMatchSetup());
+      final player = match.blueTeam.players.firstWhere(
+        (candidate) => !candidate.isGoalkeeper,
+      )..ballControlCooldown = 0.4;
+      match.tick(0.05);
+      // The engine ticks the cooldown down instead of leaving it frozen, so
+      // the man who just lost the ball cannot steal it straight back.
+      expect(player.ballControlCooldown, lessThan(0.4));
+    });
+  });
+
+  group('jump and landing', () {
+    test('jumping costs a short landing recovery before sprinting again', () {
+      final profile = PlayerProfile.generated(
+        name: 'Zipla',
+        isGoalkeeper: false,
+      );
+      final player = PlayerGame(
+        profile: profile,
+        teamId: TeamId.blue,
+        role: PlayerRole.rightWing,
+        number: 7,
+        position: Vec2(400, 350),
+      );
+      final freshSpeed = player.speed;
+      player.landingRecoveryTimer = 0.5;
+      expect(player.landingFactor, lessThan(0.6));
+      expect(player.speed, lessThan(freshSpeed));
+      player.landingRecoveryTimer = 0;
+      expect(player.landingFactor, 1.0);
+    });
+  });
+
+  group('keeper control lock', () {
+    test('a keeper who catches the ball is locked until the keys are released',
+        () {
+      final match = MatchEngine(_testMatchSetup());
+      match.tick(0.016);
+      expect(match.keeperControlLockedFor(TeamId.blue), isFalse);
+      final keeper = match.blueTeam.goalkeeper;
+      match.ball.attachTo(keeper);
+      match.tick(0.016);
+      // The keeper just won the ball: the player must lift his fingers.
+      expect(match.keeperControlLockedFor(TeamId.blue), isTrue);
+      match.releaseKeeperControlLock(TeamId.blue);
+      expect(match.keeperControlLockedFor(TeamId.blue), isFalse);
+    });
+  });
+
+  group('realistic penalties', () {
+    test('a well struck, well placed penalty beats a poor one', () {
+      final random = math.Random(7);
+      final logic = PenaltyLogic(random);
+      final match = MatchEngine(_testMatchSetup());
+      final shooter = match.blueTeam.players.firstWhere(
+        (player) => !player.isGoalkeeper,
+      )
+        ..profile.finishingRating = 95
+        ..profile.composureRating = 95
+        ..profile.shootingRating = 95;
+      var goals = 0;
+      for (var i = 0; i < 400; i++) {
+        final result = logic.takeSelectedKick(
+          shootingTeam: match.blueTeam,
+          defendingTeam: match.redTeam,
+          kickIndex: 0,
+          minute: 90,
+          shotDirection: PenaltyLane.leftLow,
+          keeperDirection: PenaltyLane.rightLow,
+          power: 1.18,
+          selectedShooter: shooter,
+        );
+        if (result.scored) {
+          goals += 1;
+        }
+        // The picture must always match the verdict.
+        if (result.outcome == PenaltyOutcome.goal) {
+          final keeperSameSide =
+              result.keeperLane == PenaltyLane.leftLow ||
+              result.keeperLane == PenaltyLane.leftHigh;
+          expect(keeperSameSide, isFalse);
+        }
+        if (result.outcome == PenaltyOutcome.saved) {
+          expect(result.scored, isFalse);
+          final shotLeft = result.shotLane == PenaltyLane.leftLow ||
+              result.shotLane == PenaltyLane.leftHigh ||
+              result.shotLane == PenaltyLane.center;
+          final keeperLeft = result.keeperLane == PenaltyLane.leftLow ||
+              result.keeperLane == PenaltyLane.leftHigh ||
+              result.keeperLane == PenaltyLane.center;
+          expect(shotLeft, keeperLeft);
+        }
+        if (result.outcome == PenaltyOutcome.overBar) {
+          expect(result.heightMeters, greaterThan(2.44));
+        }
+      }
+      // Not every penalty may be a goal, and the good taker must still
+      // convert the majority of them.
+      expect(goals, greaterThan(200));
+      expect(goals, lessThan(400));
+    });
+
+    test('power, accuracy and finishing all move the conversion rate', () {
+      final logic = PenaltyLogic(math.Random(11));
+      final match = MatchEngine(_testMatchSetup());
+      final shooter = match.blueTeam.players.firstWhere(
+        (player) => !player.isGoalkeeper,
+      )
+        ..profile.finishingRating = 20
+        ..profile.composureRating = 20
+        ..profile.shootingRating = 20;
+      var weakGoals = 0;
+      for (var i = 0; i < 300; i++) {
+        final result = logic.takeSelectedKick(
+          shootingTeam: match.blueTeam,
+          defendingTeam: match.redTeam,
+          kickIndex: 0,
+          minute: 90,
+          shotDirection: PenaltyLane.center,
+          keeperDirection: PenaltyLane.center,
+          power: 0.62,
+          selectedShooter: shooter,
+        );
+        if (result.scored) {
+          weakGoals += 1;
+        }
+      }
+      shooter.profile
+        ..finishingRating = 96
+        ..composureRating = 96
+        ..shootingRating = 96;
+      var strongGoals = 0;
+      for (var i = 0; i < 300; i++) {
+        final result = logic.takeSelectedKick(
+          shootingTeam: match.blueTeam,
+          defendingTeam: match.redTeam,
+          kickIndex: 0,
+          minute: 90,
+          shotDirection: PenaltyLane.leftLow,
+          keeperDirection: PenaltyLane.leftLow,
+          power: 1.2,
+          selectedShooter: shooter,
+        );
+        if (result.scored) {
+          strongGoals += 1;
+        }
+      }
+      expect(strongGoals, greaterThan(weakGoals));
+    });
+  });
+
+  group('passing into space', () {
+    test('a pass with nobody in the aimed direction flies that way', () {
+      final match = MatchEngine(_testMatchSetup());
+      final player = match.blueTeam.players.firstWhere(
+        (candidate) => !candidate.isGoalkeeper,
+      );
+      // Every team-mate drops behind the carrier: the cone in front of him
+      // is empty, so there is simply no one to pass to.
+      for (final mate in match.blueTeam.players) {
+        if (mate == player) {
+          continue;
+        }
+        mate.pos = Vec2(GameConstants.leftBound + 40, 200 + mate.number * 6);
+      }
+      player.pos = Vec2(GameConstants.virtualWidth / 2, 350);
+      player.lastDirection = Vec2(0, -1);
+      match.ball
+        ..attachTo(player)
+        ..pos = player.pos.copy();
+
+      match.manualKick(TeamId.blue, KickType.pass, 0.8);
+
+      expect(match.ball.owner, isNull);
+      expect(match.ball.vel.length, greaterThan(0));
+      final flight = match.ball.vel.normalized();
+      // The ball travels where the player aimed instead of turning back to
+      // the nearest shirt behind him (Gereksinim).
+      expect(flight.y, lessThan(-0.9));
+      expect(flight.x.abs(), lessThan(0.35));
+    });
+
+    test('a team-mate standing in the aimed direction gets the pass', () {
+      final match = MatchEngine(_testMatchSetup());
+      final player = match.blueTeam.players.firstWhere(
+        (candidate) => !candidate.isGoalkeeper,
+      );
+      final mate = match.blueTeam.players.firstWhere(
+        (candidate) => candidate != player && !candidate.isGoalkeeper,
+      );
+      for (final other in match.blueTeam.players) {
+        if (other == player || other == mate) {
+          continue;
+        }
+        other.pos = Vec2(GameConstants.leftBound + 40, 200 + other.number * 6);
+      }
+      player.pos = Vec2(GameConstants.virtualWidth / 2, 420);
+      mate.pos = Vec2(player.pos.x, player.pos.y - 210);
+      player.lastDirection = Vec2(0, -1);
+      match.ball
+        ..attachTo(player)
+        ..pos = player.pos.copy();
+
+      match.manualKick(TeamId.blue, KickType.pass, 0.7);
+
+      expect(match.ball.intendedReceiver?.id, mate.id);
+      expect(match.ball.vel.normalized().y, lessThan(-0.8));
+    });
+  });
+
+  group('fatigue during a stoppage', () {
+    test('a stopped match refills at most 2% of the tank per minute', () {
+      final match = MatchEngine(_testMatchSetup());
+      match.tick(0.05);
+      final player = match.blueTeam.players.firstWhere(
+        (candidate) => !candidate.isGoalkeeper,
+      );
+      player.stamina = 0.5;
+      // A substitution / VAR review stop: one real minute of wall clock.
+      match.substitutionPaused = true;
+      for (var second = 0; second < 60; second++) {
+        match.tick(1);
+      }
+      match.substitutionPaused = false;
+      final gained = player.stamina - 0.5;
+      // Energy comes back, but only a trickle: the old build handed the
+      // players a full tank every time the referee looked at the screen
+      // (Gereksinim: dakikada en fazla %2).
+      expect(gained, greaterThan(0));
+      expect(gained, lessThanOrEqualTo(0.02));
+    });
+  });
+
+  group('var reviews', () {
+    test('leaving a review resumes the match right away', () {
+      final match = MatchEngine(_testMatchSetup());
+      match.tick(0.05);
+      // A review (or any referee banner) freezes the game...
+      match.cycleFormation(TeamId.blue);
+      expect(match.isFrozen, isTrue);
+
+      // ...and leaving it puts the players straight back on the pitch
+      // instead of forcing a restart of the whole match
+      // (Gereksinim: VAR cikisinda mac devam etsin).
+      match.skipCurrentReview();
+      expect(match.isFrozen, isFalse);
+      match.tick(0.05);
+      expect(match.isFrozen, isFalse);
     });
   });
 }

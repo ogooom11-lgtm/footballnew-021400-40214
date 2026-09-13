@@ -142,7 +142,7 @@ class MatchEngine {
   bool _cornerReadyOverride = false;
   /// How long the current corner restart has been pending — a watchdog
   /// against the game hanging on a corner that can never settle
-  /// (مطلب: منع تعليق اللعبة أثناء الركنية).
+  /// (Gereksinim).
   double _cornerPendingSeconds = 0;
   bool wallSelectionPending = false;
   TeamId? wallDefendingTeamId;
@@ -150,6 +150,18 @@ class MatchEngine {
   final Set<String> _lockedWallPlayerIds = <String>{};
   final Map<String, Vec2> _lockedWallPositions = <String, Vec2>{};
   Vec2? _restartSpot;
+
+  /// The single team-mate who walks next to his keeper during a goal kick so
+  /// the keeper has a short option without anybody crowding the box
+  /// (Gereksinim).
+  String? _goalKickReceiverId;
+
+  /// Teams whose keeper just caught the ball: the human player must lift his
+  /// fingers off the keyboard before he can control the keeper again
+  /// (Gereksinim).
+  final Set<TeamId> _keeperControlLock = <TeamId>{};
+  String? _lastBallOwnerId;
+
   List<PlayerGame> get wallCandidates => List.unmodifiable(_wallCandidates);
   PlayerGame? _recentKicker;
   double _recentKickerGrace = 0;
@@ -160,7 +172,7 @@ class MatchEngine {
   bool replayPlaying = false;
   int replayIndex = 0;
   /// Playback speed of the VAR replay: 0.25 = slow motion, 0.5 = half,
-  /// 1 = real time, 2 = fast forward (مطلب تبطيئ العرض وتسريعه في الفار).
+  /// 1 = real time, 2 = fast forward (Gereksinim).
   double replaySpeed = 1;
   double _replayPlaybackAccumulator = 0;
   bool substitutionPaused = false;
@@ -239,6 +251,34 @@ class MatchEngine {
 
   bool isGoalKickLockedAgainst(TeamId id) {
     return restartKind == RestartKind.goalKick && restartTeamId != id;
+  }
+
+  /// The team-mate of the restarting keeper who waits in the adjacent zone
+  /// for the short goal-kick pass (Gereksinim).
+  PlayerGame? get goalKickReceiver {
+    final id = _goalKickReceiverId;
+    if (id == null ||
+        restartKind != RestartKind.goalKick ||
+        restartTeamId == null) {
+      return null;
+    }
+    return teamById(restartTeamId!).playerById(id);
+  }
+
+  /// True while the keeper holds a ball that the human may not control yet:
+  /// the hands that were pressing movement keys must be lifted first.
+  bool keeperControlLockedFor(TeamId id) => _keeperControlLock.contains(id);
+
+  /// Called by the input layer once every key is released — from then on the
+  /// keeper belongs to the human again.
+  void releaseKeeperControlLock(TeamId id) {
+    _keeperControlLock.remove(id);
+  }
+
+  void _lockKeeperControl(PlayerGame keeper) {
+    if (keeper.isGoalkeeper) {
+      _keeperControlLock.add(keeper.teamId);
+    }
   }
 
   bool isCornerAttackActiveFor(TeamGame team) {
@@ -624,10 +664,12 @@ class MatchEngine {
       return;
     }
     if (substitutionPaused) {
-      // The substitution/VAR break lets every player catch his breath:
-      // stamina recovers during the stoppage
-      // (مطلب: أثناء التبديل والفار اللاعبون يستريحون وتزيد طاقتهم).
-      _recoverStaminaAll(dt * 0.030);
+      // A stoppage is not a spa: the players get a very slow breather —
+      // about 1–2% of energy per real minute, never an instant refill
+
+      // About 1-2% of the tank per real minute while the game is stopped
+      // (Gereksinim: enerji cok yavas dolsun).
+      _recoverStaminaAll(dt * 0.00024);
       return;
     }
     _tickCooldowns(dt);
@@ -635,8 +677,10 @@ class MatchEngine {
     if (_pauseTimer > 0) {
       _pauseTimer -= dt;
       // Match pauses (VAR reviews, banners, set-piece organisation) also
-      // give the players a small recovery window.
-      _recoverStaminaAll(dt * 0.018);
+      // give the players a small recovery window — deliberately tiny so a
+      // VAR break can never hand anyone a full tank
+
+      _recoverStaminaAll(dt * 0.00024);
       _recordReplay(dt);
       if (_pauseTimer <= 0) {
         final callback = _afterPause;
@@ -727,6 +771,7 @@ class MatchEngine {
 
     _ballPhysics.update(ball, dt);
     _handleBallContacts();
+    _syncKeeperControlLock();
     _handleCornerJostle(dt);
     _preventOverlap();
     _enforceRestartRestrictions();
@@ -811,7 +856,7 @@ class MatchEngine {
   /// his chosen man and switches manually (C for blue, Q for red).
   /// Remembers the last auto-selected player per team so control does not
   /// flip-flop between two equally close players
-  /// (مطلب: عند تساوي لاعبين يبقى التحكم على نفس اللاعب).
+  /// (oyuncu).
   final Map<TeamId, String> _autoControlledIds = <TeamId, String>{};
   final Map<TeamId, bool> _autoSwitchEnabled = <TeamId, bool>{
     TeamId.blue: true,
@@ -854,7 +899,7 @@ class MatchEngine {
     final nearest = team.closestTo(ball.pos, includeGoalkeeper: includeGoalkeeper);
     // Hysteresis: when two players are about equally close, stay on the
     // current one instead of flipping control every frame
-    // (مطلب: عند تساوي المسافة يبقى التحكم على نفس اللاعب).
+    // (oyuncu).
     final lastId = _autoControlledIds[id];
     if (lastId != null && lastId != nearest.id) {
       final matches = team.players.where(
@@ -1047,7 +1092,7 @@ class MatchEngine {
       if (highDelivery) {
         // One press of the long pass must drop INTO the penalty area at a
         // header-friendly height of 1.8-2.2 m
-        // (مطلب الركنية: تصل منطقة الجزاء بارتفاع ١.٨٠ - ٢.٢٠).
+
         final speedBase = 7.6 + player.profile.passingRating / 100.0 * 2.0;
         final distance = (cornerTarget - ball.pos).length;
         final delivery = _aerialDelivery(
@@ -1360,10 +1405,48 @@ class MatchEngine {
     }
     final team = teamById(keeper.teamId);
     final goalKick = isGoalKickPendingFor(team);
-    final candidates = team.players.where(
+    final allCandidates = team.players.where(
       (mate) => mate != keeper && !mate.isGoalkeeper && !mate.isSentOff,
     );
+    // The ball goes where the keeper is looking. Only team-mates standing
+    // in that direction are real passing options; everyone else is ignored
+    // (Gereksinim).
+    final facing = keeperFacingDirection(keeper);
+    final candidates = allCandidates
+        .where(
+          (mate) =>
+              (mate.pos - keeper.pos).normalized().dot(facing) > 0.30,
+        )
+        .toList();
     final opponent = opponentOf(team);
+    if (candidates.isEmpty) {
+      // Nobody is in the direction the keeper is facing: the ball travels
+      // that way anyway — a clearance into space, never a magic pass back
+      // across the pitch to the nearest shirt.
+      final forward = Vec2(team.attackDirection.toDouble(), 0);
+      ball.pos = keeper.pos +
+          facing * (keeper.radius + GameConstants.ballRadius + 6);
+      final distance = high ? 430.0 : 240.0;
+      final delivery = _aerialDelivery(
+        distancePx: distance,
+        arrivalHeight: 1.2,
+        speedBase: 7.4 + keeper.profile.passingRating / 100.0 * 2.0,
+      );
+      releaseFromPlayer(
+        keeper,
+        facing,
+        high ? math.max(delivery.power, power.clamp(0.72, 1.35)) : 0.92,
+        type: high ? KickType.highPass : KickType.pass,
+        target: null,
+        loft: high ? delivery.loft : 0,
+      );
+      keeper
+        ..catchTimer = 0
+        ..keeperParryCooldown = math.max(keeper.keeperParryCooldown, 0.48)
+        ..manualOverride = 0.42
+        ..lastDirection = forward;
+      return ball.owner == null && ball.vel.length > 0.1;
+    }
     final preferred = high
         ? candidates.where(
             (mate) => mate.role.isAttacker || mate.role.isWide,
@@ -1393,24 +1476,37 @@ class MatchEngine {
         nearestCapped = mate;
       }
     }
-    final target =
-        // Short distribution: pass to the nearest OPEN teammate (the one
-        // with no opponent marking him). If everyone is marked, fall back
-        // to the nearest candidate.
+    // Goal kick: the short option beside the keeper is always the first
+    // choice — he is standing there exactly for that pass.
+    final receiver = goalKick ? goalKickReceiver : null;
+    final preferredPool = (preferred.isEmpty ? capped : preferred.where(capped.contains))
+        .toList();
+    final pool = preferredPool.isEmpty ? candidates : preferredPool;
+    PlayerGame? target;
+    if (receiver != null &&
+        candidates.any((mate) => mate.id == receiver.id) &&
+        (goalKick || receiver.pos.distanceTo(keeper.pos) < 260)) {
+      target = receiver;
+    }
+    target ??=
+        // Short distribution: the nearest OPEN team-mate who stands in the
+        // direction the keeper is facing. If everyone is marked, fall back
+        // to the nearest of those.
         high
-        ? (chooseBestPass(
-                keeper,
-                preferred.isEmpty ? capped : preferred.where(capped.contains),
-                preferForward: true,
-              ) ??
-              nearestCapped ??
-              team.closestTo(keeper.homePos, includeGoalkeeper: false))
-        : _nearestOpenTeammate(
-            keeper,
-            preferred.isEmpty ? capped : preferred,
-            opponent,
-            team,
-          );
+        ? (chooseBestPass(keeper, pool, preferForward: true) ??
+              nearestCapped)
+        : _nearestOpenTeammate(keeper, pool, opponent, team);
+    // Never leave the keeper without an option: the nearest man in the cone.
+    PlayerGame? nearestInCone;
+    var nearestInConeDistance = double.infinity;
+    for (final mate in candidates) {
+      final distance = keeper.pos.distanceTo(mate.pos);
+      if (distance < nearestInConeDistance) {
+        nearestInConeDistance = distance;
+        nearestInCone = mate;
+      }
+    }
+    final resolvedTarget = target ?? nearestCapped ?? nearestInCone ?? candidates.first;
     final forward = Vec2(team.attackDirection.toDouble(), 0);
     ball.pos = keeper.pos +
         forward * (keeper.radius + GameConstants.ballRadius + 8);
@@ -1421,12 +1517,12 @@ class MatchEngine {
       if (goalKick) {
         // A goal kick must land between a quarter and two-thirds of the
         // pitch — never fly to the opposite penalty area
-        // (مطلب: قوة الكرة بعد ربع الملعب وقبل ثلثيه).
-        var distance = (target.pos - ball.pos).length;
+        // (Gereksinim).
+        var distance = (resolvedTarget.pos - ball.pos).length;
         final maxDistance = GameConstants.pitchWidth * 0.62;
         final minDistance = GameConstants.pitchWidth * 0.24;
         final clampedDistance = distance.clamp(minDistance, maxDistance);
-        final direction = (target.pos - ball.pos).normalized(Vec2(team.attackDirection.toDouble(), 0));
+        final direction = (resolvedTarget.pos - ball.pos).normalized(Vec2(team.attackDirection.toDouble(), 0));
         final landing = ball.pos +
             direction * clampedDistance;
         final delivery = _aerialDelivery(
@@ -1443,7 +1539,7 @@ class MatchEngine {
           landing - ball.pos,
           kickPower,
           type: KickType.highPass,
-          target: target,
+          target: resolvedTarget,
           loft: kickLoft,
         );
         keeper
@@ -1454,7 +1550,7 @@ class MatchEngine {
         return ball.owner == null && ball.vel.length > 0.1;
       }
       // Normal high throw: a short-to-mid delivery.
-      final distance = (target.pos - ball.pos).length.clamp(120.0, 430.0);
+      final distance = (resolvedTarget.pos - ball.pos).length.clamp(120.0, 430.0);
       final delivery = _aerialDelivery(
         distancePx: distance,
         arrivalHeight: 1.1,
@@ -1467,10 +1563,10 @@ class MatchEngine {
     }
     releaseFromPlayer(
       keeper,
-      target.pos - ball.pos,
+      resolvedTarget.pos - ball.pos,
       kickPower,
       type: high ? KickType.highPass : KickType.pass,
-      target: target,
+      target: resolvedTarget,
       loft: kickLoft,
     );
     keeper
@@ -1536,15 +1632,27 @@ class MatchEngine {
         : power * (0.76 + player.stamina * 0.12 + skill * 0.18);
     if (type != KickType.shoot &&
         (player.errorFactor > 0 || skill < 0.90)) {
-      final side = Vec2(-adjustedDirection.y, adjustedDirection.x).normalized();
       final errorScale = 92.0 * (1.18 - skill * 0.55);
-      adjustedDirection +=
-          side *
-          ((random.nextDouble() - 0.5) * player.errorFactor * errorScale);
+      final lateral =
+          (random.nextDouble() - 0.5) * player.errorFactor * errorScale;
+      // The mistake bends the kick by a small angle. Measured against the
+      // real pass length it lands the ball beside the team-mate; a pass
+      // played into empty space (unit direction) must still fly roughly
+      // where the player aimed (Gereksinim).
+      final reference = adjustedDirection.length < 1.5
+          ? 185.0
+          : adjustedDirection.length;
+      final angle = math.atan2(lateral, reference);
+      final cosA = math.cos(angle);
+      final sinA = math.sin(angle);
+      adjustedDirection = Vec2(
+        adjustedDirection.x * cosA - adjustedDirection.y * sinA,
+        adjustedDirection.x * sinA + adjustedDirection.y * cosA,
+      );
     }
     // A free-kick shot lifts over the human wall in proportion to its
     // power — weak efforts stay low and hit the wall
-    // (مطلب: التسديدة تمر من فوق الحائط على حسب شدة التسديد).
+    // (Gereksinim).
     var kickLoft = loft;
     if (dippingFreeKick &&
         type == KickType.shoot &&
@@ -1743,8 +1851,12 @@ class MatchEngine {
       }
       // Baseline fatigue: everyone burns energy as the match progresses so
       // tired legs are always visible in the movement
-      // (مطلب: منطق التعب والطاقة لازم يبان على اللاعبين).
-      _baselineStaminaDrain(dt);
+      // (Gereksinim). A stoppage is not play: during a VAR review or a
+      // substitution nobody burns energy, the players only recover very
+      // slowly.
+      if (!substitutionPaused) {
+        _baselineStaminaDrain(dt);
+      }
     }
     _recentKickerGrace = math.max(0, _recentKickerGrace - dt);
     if (_recentKickerGrace <= 0) {
@@ -1780,6 +1892,17 @@ class MatchEngine {
         player.keeperRehandleCooldown - dt,
       );
       player.jumpAnimationTimer = math.max(0, player.jumpAnimationTimer - dt);
+      player.landingRecoveryTimer = math.max(
+        0,
+        player.landingRecoveryTimer - dt,
+      );
+      if (player.landingRecoveryTimer <= 0) {
+        player.isAirborne = false;
+      }
+      player.ballControlCooldown = math.max(
+        0,
+        player.ballControlCooldown - dt,
+      );
       if (player.isGoalkeeper) {
         if (player.keeperGroundTimer <= 0) {
           player.keeperState = ball.owner == player ? 'top elde' : 'hazir';
@@ -1819,16 +1942,38 @@ class MatchEngine {
           final cautious = defender.yellowCardsThisMatch > 0;
           // The AI defender can dispossess the human-controlled dribbler
           // too — the ball is never glued to the controlled player
-          // (مطلب: اللاعب غير المتحكم به يقدر يمتلك الكرة من المتحكم به).
+          // (Gereksinim).
           final controlledCarrier = owner.manualOverride > 0;
-          final tackleChance =
-              (defender.role.isDefender ? 0.34 : 0.22) *
-              (cautious ? 0.72 : 1.0) *
-              (controlledCarrier ? 1.22 : 1.0);
           final lateContact =
               (owner.pos.x - defender.pos.x) *
                   teamById(owner.teamId).attackDirection >
               8;
+          // The duel is decided by the two players, not by a fixed roll:
+          // the tackler brings his intelligence, his physique and his
+          // pressing role, the carrier brings his control, his balance and
+          // his intelligence (
+
+          final carryQuality =
+              owner.duelStrength * 0.55 + owner.zekaFactor * 0.45;
+          final tackleQuality =
+              defender.duelStrength * 0.28 +
+              defender.zekaFactor * 0.42 +
+              (defender.role.isDefender ? 0.16 : 0.05) +
+              defender.role.pressingPriority * 0.10;
+          var tackleChance = 0.20 + (tackleQuality - carryQuality) * 0.62;
+          if (lateContact) {
+            tackleChance += 0.06;
+          }
+          if (cautious) {
+            tackleChance -= 0.05;
+          }
+          // The AI really can take the ball off a human-controlled dribbler.
+          if (controlledCarrier) {
+            tackleChance += 0.08;
+          }
+          // A tired carrier loses the ball more easily.
+          tackleChance += (1 - owner.stamina) * 0.10;
+          tackleChance = tackleChance.clamp(0.05, 0.62).toDouble();
           final contactSeverity =
               random.nextDouble() +
               (lateContact ? 0.18 : 0) +
@@ -1899,11 +2044,33 @@ class MatchEngine {
             }
             defender.matchTackles += 1;
             defender.profile.tackles += 1;
-            ball.attachTo(defender);
+            owner.ballControlCooldown = 0.42;
+            // Winning the duel is not the same as controlling the ball: the
+            // better the tackler's technique and intelligence, the cleaner
+            // the ball comes out of the challenge. A crude defender just
+            // knocks it loose for the next duel.
+            final cleanWin =
+                (defender.duelStrength * 0.5 + defender.zekaFactor * 0.5) >
+                    random.nextDouble();
+            if (cleanWin) {
+              ball.attachTo(defender);
+            } else {
+              _deflectFromPlayer(defender, strong: true);
+              ball.owner = null;
+            }
           } else {
-            // Attacker kept the ball - successful dribble
+            // Attacker kept the ball - successful dribble. A weak carrier
+            // can still lose the ball in the contact even when he "wins"
+            // the duel.
             owner.matchDribbles += 1;
             owner.matchSuccessfulDribbles += 1;
+            final loseControl = (1 - carryQuality) *
+                (0.30 + (1 - owner.stamina) * 0.25);
+            if (random.nextDouble() < loseControl) {
+              owner.ballControlCooldown = 0.36;
+              _deflectFromPlayer(owner, strong: false);
+              ball.owner = null;
+            }
           }
           return;
         }
@@ -2006,8 +2173,15 @@ class MatchEngine {
         return;
       }
 
+      // Controlling the ball is a skill: technique, physique and above all
+      // the player's intelligence decide how cleanly it sticks
+      // (Gereksinim).
       final controlChance =
-          (player.isGoalkeeper ? 0.82 : 0.94) - player.errorFactor * 0.18;
+          ((player.isGoalkeeper ? 0.82 : 0.94) -
+                  player.errorFactor * 0.18 +
+                  (player.zekaFactor - 0.5) * 0.10)
+              .clamp(0.45, 0.99)
+              .toDouble();
       if (random.nextDouble() < controlChance) {
         _recordReception(player);
         if (player.isGoalkeeper && ball.lastKickType == KickType.shoot) {
@@ -2019,7 +2193,7 @@ class MatchEngine {
       } else {
         // A failed control still counts as a teammate TOUCH: if the ball
         // came from a team-mate's pass, the pass was delivered successfully
-        // (مطلب: التمريرة الناجحة بمجرد لمس الزميل لها).
+        // (pas).
         _recordTeammateTouch(player);
         _deflectFromPlayer(player, strong: false);
       }
@@ -2039,6 +2213,11 @@ class MatchEngine {
   }
 
   bool _canSecureControl(PlayerGame player) {
+    if (player.ballControlCooldown > 0) {
+      // He just lost the ball: he needs a moment to sort his feet out
+      // again instead of the ball snapping back to him every frame.
+      return false;
+    }
     if (player.isGoalkeeper && isInPenaltyBox(player.pos, player.teamId)) {
       return ball.heightMeters <= player.bodyReachMeters + 0.10;
     }
@@ -2132,7 +2311,7 @@ class MatchEngine {
         (random.nextDouble() - 0.5) * (1.45 - parryControl * 0.90);
     // Deflect strongly to the side of the pitch the keeper already covers
     // (towards the nearer byline) so the rebound never sits at the feet of
-    // the onrushing striker (مطلب: الكرة ترتد بعيدًا عن المهاجم).
+    // the onrushing striker (top).
     final outSide = keeper.pos.y < GameConstants.virtualHeight / 2 ? -1.0 : 1.0;
     final reboundDirection = Vec2(
       team.attackDirection.toDouble() * 0.72,
@@ -2215,6 +2394,23 @@ class MatchEngine {
   /// for position (each defender tries to mark the man nearest to him).
   /// Contact is mostly harmless — a foul is only called about 10% of the
   /// time, matching real corner-kick wrestling.
+  /// Watches the moment the keeper wins the ball and locks human control
+  /// until the keys are released, so a keeper who catches a shot is not
+  /// instantly driven around by a player who never stopped pressing buttons
+  /// (M: Kaleci MTop M M
+  /// M ).
+  void _syncKeeperControlLock() {
+    final owner = ball.owner;
+    final ownerId = owner?.id;
+    if (ownerId == _lastBallOwnerId) {
+      return;
+    }
+    _lastBallOwnerId = ownerId;
+    if (owner != null && owner.isGoalkeeper) {
+      _lockKeeperControl(owner);
+    }
+  }
+
   void _handleCornerJostle(double dt) {
     final attackingId = setPieceAttackTeamId;
     final duringCorner =
@@ -2260,10 +2456,19 @@ class MatchEngine {
         a.keepInsideField();
         b.keepInsideField();
 
-        // About 10% of corners end in a foul from the box wrestling:
-        // ~0.35% per touching pair per second, over roughly 30 contact
-        // pair-seconds per corner => ~10% per corner.
-        final foulChance = 0.0035 * dt;
+        // Two men going up for the same ball, or a keeper landing on the
+        // turf, is a football duel — never a foul. Only players who are
+        // firmly on their feet can be pulled up for wrestling, so jumping
+        // for a corner can never freeze the match
+        // (ziplama: kaleci).
+        final aOnFeet = !a.isAirborne && a.jumpAnimationTimer <= 0.12;
+        final bOnFeet = !b.isAirborne && b.jumpAnimationTimer <= 0.12;
+        if (!aOnFeet || !bOnFeet) {
+          continue;
+        }
+        // A genuine shove is very rare now: ~0.06% per contact pair per
+        // second instead of the old 0.35%.
+        final foulChance = 0.0006 * dt;
         if (random.nextDouble() >= foulChance) {
           continue;
         }
@@ -2275,27 +2480,16 @@ class MatchEngine {
         final foulSpot = victim.pos.copy();
         final inBox = isInPenaltyBox(foulSpot, fouler.teamId);
         fouler.tackleContactCooldown = 1.4;
-        _startVarDecision(
-          title: inBox ? 'VAR PENALTI KONTROLU' : 'VAR FAUL KONTROLU',
-          reason:
-              '${fouler.profile.name}: korner itismesi • ${victim.profile.name}',
-          category: inBox ? 'penalty' : 'foul',
-          recommendedDecision: 'foul',
-          options: const ['playOn', 'foul', 'yellow'],
-          resolve: (decision) {
-            if (decision == 'playOn') {
-              return;
-            }
-            _applyReviewedFoul(
-              victim: victim,
-              fouler: fouler,
-              foulSpot: foulSpot,
-              inPenaltyBox: inBox,
-              violent: false,
-              reckless: false,
-              cardDecision: decision,
-            );
-          },
+        // The decision is taken on the spot: no VAR stoppage for a small
+        // push in the box, so the corner never hangs the game.
+        _applyReviewedFoul(
+          victim: victim,
+          fouler: fouler,
+          foulSpot: foulSpot,
+          inPenaltyBox: inBox,
+          violent: false,
+          reckless: false,
+          cardDecision: 'foul',
         );
         return;
       }
@@ -2381,7 +2575,7 @@ class MatchEngine {
             _startPause(
               'OFSAYT ONAYLANDI',
               candidate.event.offenderName,
-              1.25,
+              GameConstants.varConfirmSeconds,
               null,
               kind: 'var',
             );
@@ -2759,10 +2953,13 @@ class MatchEngine {
       moveTowards(defending.goalkeeper, target, 1.18, dt);
     }
     _ballPhysics.update(ball, dt);
-    if (!penalty.result!.scored &&
+    // Only a kick the verdict says was saved may be touched by the keeper —
+    // a goal-bound strike or a miss is never accidentally "kept"
+    // (sutlar).
+    if (penalty.result!.outcome == PenaltyOutcome.saved &&
         !_penaltyBallDeflected &&
         defending.goalkeeper.pos.distanceTo(ball.pos) <
-            defending.goalkeeper.radius + GameConstants.ballRadius + 12) {
+            defending.goalkeeper.radius + GameConstants.ballRadius + 14) {
       _deflectFromPlayer(defending.goalkeeper, strong: true);
       defending.goalkeeper.profile.saves += 1;
       defending.goalkeeper.matchSaves += 1;
@@ -2873,27 +3070,27 @@ class MatchEngine {
       PenaltyLane.center => goalCenterY,
       PenaltyLane.rightLow || PenaltyLane.rightHigh => goalCenterY + sideOffset,
     };
-    final savedSide = _samePenaltySide(result.shotLane, result.keeperLane);
-    var loft = _penaltyLoft(result.heightMeters);
-    if (!result.scored) {
-      if (savedSide) {
-        // Keeper guessed right: aim stays in the corner — the keeper dives
-        // and saves/parries it there.
-      } else if (result.heightMeters > 2.44) {
-        // Over the bar: keep the aim central, the height sends it over.
-        targetY = goalCenterY;
-        loft = math.max(loft, _penaltyLoft(2.55));
-      } else {
-        // Missed wide: just off the post — a small, realistic miss, scaled
-        // by the shooter's finishing (good finishers miss by less).
-        final missAmount =
-            (10 + (1 - shooter.profile.finishingSkill) * 22).toDouble();
-        final laneSign = result.shotLane == PenaltyLane.leftLow ||
-                result.shotLane == PenaltyLane.leftHigh
-            ? -1.0
-            : 1.0;
+    // The picture follows the verdict exactly: a goal is inside the frame,
+    // a save is on the keeper, a miss is off the post or over the bar.
+    var loft = _penaltyLoft(result.heightMeters.clamp(0.30, 2.40));
+    final laneSign = result.shotLane == PenaltyLane.leftLow ||
+            result.shotLane == PenaltyLane.leftHigh
+        ? -1.0
+        : 1.0;
+    switch (result.outcome) {
+      case PenaltyOutcome.goal:
+      case PenaltyOutcome.saved:
+        // Inside the goal: aim at the chosen corner, at the recorded height.
+        break;
+      case PenaltyOutcome.overBar:
+        targetY = goalCenterY + laneSign * sideOffset * 0.4;
+        loft = math.max(loft, _penaltyLoft(2.62));
+      case PenaltyOutcome.wide:
+        final missAmount = (result.missAmount <= 0
+                ? 10 + (1 - shooter.profile.finishingSkill) * 22
+                : result.missAmount)
+            .toDouble();
         targetY = goalCenterY + laneSign * (halfGoal + missAmount);
-      }
     }
     final target = Vec2(goalX, targetY);
     ball.release(
@@ -3226,7 +3423,7 @@ class MatchEngine {
     _startPause(
       title,
       'VAR incelemesi: $reason',
-      GameConstants.replayFreezeSeconds + 1.4,
+      GameConstants.varFreezeSeconds,
       () => resolver(recommended),
       isVar: true,
       reason: reason,
@@ -3531,7 +3728,79 @@ class MatchEngine {
     keeper
       ..pos = _restartSpot! - Vec2(team.attackDirection * 16, 0)
       ..lastDirection = Vec2(team.attackDirection.toDouble(), 0);
+    _goalKickReceiverId = _pickGoalKickReceiver(team, keeper);
     _shapeRestartPlayers(team, opponentOf(team), isCorner: false);
+  }
+
+  /// The defender/midfielder who gives the keeper a short passing option.
+  /// Picked on the keeper's own side of the pitch, so the pass is safe and
+  /// nobody has to run across the box.
+  String? _pickGoalKickReceiver(TeamGame team, PlayerGame keeper) {
+    PlayerGame? best;
+    var bestScore = double.infinity;
+    for (final mate in team.players) {
+      if (mate == keeper || mate.isGoalkeeper || mate.isSentOff) {
+        continue;
+      }
+      if (!(mate.role.isDefender ||
+          mate.role == PlayerRole.defensiveMidfielder ||
+          mate.role.isWide)) {
+        continue;
+      }
+      final distance = mate.pos.distanceTo(keeper.pos);
+      if (distance < bestScore) {
+        bestScore = distance;
+        best = mate;
+      }
+    }
+    return best?.id;
+  }
+
+  /// Where the designated receiver waits during a goal kick: beside and
+  /// slightly ahead of his keeper, inside the box, ready for the short pass.
+  /// He never attacks the keeper — he just offers himself.
+  Vec2? goalKickReceiveTargetFor(PlayerGame player) {
+    if (restartKind != RestartKind.goalKick ||
+        restartTeamId != player.teamId ||
+        player.id != _goalKickReceiverId) {
+      return null;
+    }
+    final team = teamById(player.teamId);
+    final keeper = team.goalkeeper;
+    if (keeper.isSentOff) {
+      return null;
+    }
+    final forward = Vec2(team.attackDirection.toDouble(), 0);
+    final lateralSign = player.pos.y >= keeper.pos.y ? 1.0 : -1.0;
+    final target =
+        keeper.pos + forward * 54.0 + Vec2(0, lateralSign * 52.0);
+    target.clampTo(
+      GameConstants.leftBound + 24,
+      GameConstants.topBound + 24,
+      GameConstants.rightBound - 24,
+      GameConstants.bottomBound - 24,
+    );
+    return target;
+  }
+
+  /// The keeper's facing direction, used for every distribution: the ball
+  /// travels where the keeper looks, not automatically to the closest
+  /// team-mate (pas: oyuncu).
+  Vec2 keeperFacingDirection(PlayerGame keeper) {
+    final team = teamById(keeper.teamId);
+    final forward = Vec2(team.attackDirection.toDouble(), 0);
+    final facing = keeper.lastDirection;
+    if (facing.isZero) {
+      return forward;
+    }
+    final normalized = facing.normalized();
+    // A keeper never passes into his own net: anything behind him is
+    // projected onto the forward half plane.
+    final forwardness = normalized.dot(forward);
+    if (forwardness > 0.15) {
+      return normalized;
+    }
+    return (forward * 0.7 + normalized * 0.3).normalized(forward);
   }
 
   void toggleGoalReview(int index) {
@@ -3592,7 +3861,7 @@ class MatchEngine {
   }
 
   /// VAR can cancel any decision, applied instantly — no retroactive edits
-  /// (مطلب: VAR يلغي أي قرار ويطبق فوراً).
+  /// (VAR).
   bool canToggleTimelineDecision(MatchTimelineEvent timeline) =>
       timeline.kind == 'goal' ||
       timeline.kind == 'yellowCard' ||
@@ -3621,7 +3890,7 @@ class MatchEngine {
       // flipping the flag cancels the decision on the spot.
       timeline.canceled = !timeline.canceled;
       banner = MatchBanner(
-        timeline.canceled ? 'قرار ملغي' : 'قرار اعيد',
+        timeline.canceled ? 'karar iptal edildi' : 'karar geri alindi',
         "VAR ${timeline.minute}'",
         2.0,
         minute: timeline.minute,
@@ -3680,7 +3949,7 @@ class MatchEngine {
           ..pos = player.homePos.copy()
           ..controlled = false
           // He is back on the pitch: his presence window closes at the
-          // current minute again (مطلب نافذة حضور اللاعب في VAR).
+          // current minute again (oyuncu: VAR).
           ..leftMatchMinute = null;
       } else {
         if (ball.owner == player) ball.owner = null;
@@ -3766,7 +4035,7 @@ class MatchEngine {
   /// Reverts the last substitution of [id]'s team (undo from the
   /// substitution panel).
   /// Brings a previously substituted-out player back for the player on the
-  /// pitch at [outIndex] (مطلب: إعادة إدخال أي لاعب سبق تبديله).
+  /// pitch at [outIndex] (Gereksinim).
   bool reenterFromLog(TeamId id, int outIndex, int logIndex,
       {double minute = 0}) {
     final team = teamById(id);
@@ -3782,7 +4051,7 @@ class MatchEngine {
       ball.attachTo(team.players[outIndex]);
     }
     _startPause(
-      '${team.name}: اعادة ادخال',
+      '${team.name}: yeniden giris',
       '${team.substitutionsUsed}/${team.substitutionLimit}',
       0.8,
       null,
@@ -3798,7 +4067,7 @@ class MatchEngine {
     if (!ok) {
       return false;
     }
-    _startPause('${team.name}: عودة مطرود', 'طوارئ', 0.8, null);
+    _startPause('${team.name}: atilan oyuncu dondu', 'Acil durum', 0.8, null);
     return true;
   }
 
@@ -3997,7 +4266,7 @@ class MatchEngine {
 
   /// Recovers a small amount of stamina for everyone still on the pitch.
   /// Used during substitution breaks and VAR pauses so the stoppages act
-  /// as a genuine breather (مطلب استشفاء الطاقة أثناء التوقفات).
+  /// as a genuine breather (Gereksinim).
   void _recoverStaminaAll(double amount) {
     if (amount <= 0) {
       return;
@@ -4019,7 +4288,7 @@ class MatchEngine {
 
   /// Time-based fatigue: even standing players slowly tire so the match
   /// always shows visible tired legs and slower sprints late on
-  /// (مطلب ضروري: منطق التعب والطاقة).
+
   void _baselineStaminaDrain(double dt) {
     for (final player in allPlayers) {
       if (player.isSentOff) {
@@ -4077,6 +4346,33 @@ class MatchEngine {
     if (override != null) return override;
     return teamMode(team);
   }
+
+  /// Whether the team was told to press hard right now (the letter key).
+  bool doublePressActiveFor(TeamId id) =>
+      (id == TeamId.blue ? blueTacticalOverride : redTacticalOverride) ==
+      TeamMode.press;
+
+  /// Whether the team was told to drop into a deep block (letter key).
+  bool doubleDefenseActiveFor(TeamId id) =>
+      (id == TeamId.blue ? blueTacticalOverride : redTacticalOverride) ==
+      TeamMode.defense;
+
+  /// The factor the players' running and pressing uses. A team told to
+  /// press runs noticeably harder and one told to defend sits deeper — the
+  /// instruction must be felt on the pitch, not just be a label.
+  double tacticalIntensityFor(TeamId id) {
+    final override =
+        id == TeamId.blue ? blueTacticalOverride : redTacticalOverride;
+    return switch (override) {
+      TeamMode.press => 1.34,
+      TeamMode.defense => 0.88,
+      _ => 1.0,
+    };
+  }
+
+  /// In hard-press mode two men hunt the ball (the second one closes the
+  /// carrier); otherwise exactly one presses and one covers.
+  bool secondPresserAllowedFor(TeamId id) => doublePressActiveFor(id);
 
   /// Direct player movement without AI check (used by AI itself).
   void _movePlayerDirect(PlayerGame player, Vec2 direction, double dt) {
@@ -4147,13 +4443,16 @@ class MatchEngine {
     if (restartKind == RestartKind.goalKick && restartTeamId != null) {
       final defending = teamById(restartTeamId!);
       if (player.teamId != restartTeamId) {
-        // Opponents keep their general position for a goal kick — they
-        // are only pushed just outside the penalty area, never all the
-        // way back to the halfway line.
+        // Opponents must clear the penalty area completely during a goal
+        // kick (
+        // ) — they step out behind the box line, no further.
         if (isInPenaltyBox(player.pos, defending.id)) {
+          const boxDepth = 135.0;
+          const margin = 10.0;
           player.pos.x = defending.side == TeamSide.left
-              ? GameConstants.leftBound + 152
-              : GameConstants.rightBound - 152;
+              ? GameConstants.leftBound + boxDepth + margin
+              : GameConstants.rightBound - boxDepth - margin;
+          player.keepInsideField();
         }
       }
     }
@@ -4245,7 +4544,7 @@ class MatchEngine {
       }
     } else if (type == KickType.shoot) {
       // A kick from behind the halfway line that can never reach the goal
-      // is a clearance (تبعيد), not a shot — only balls genuinely directed
+      // is a clearance , not a shot — only balls genuinely directed
       // at the goal and able to arrive there count as shots.
       final goalX = goalCenterFor(team).x;
       final distanceToGoal = (goalX - ball.pos.x).abs();
@@ -4529,7 +4828,7 @@ class MatchEngine {
     final timeToGoalLine = (goal.x - player.pos.x) / facing.x;
     // From beside the goal (acute angle) or very close range the aim must
     // stay INSIDE the posts — shooting outside from there is unacceptable,
-    // and an open net is always attacked (مطلب ضروري).
+    // and an open net is always attacked .
     final lateral = (player.pos.y - centerY).abs();
     final horizontal = (goal.x - player.pos.x).abs();
     final acuteAngle = lateral > horizontal * 0.85 + 40;
@@ -4708,7 +5007,7 @@ class MatchEngine {
         );
         player.profile.recalculateZekaGucu();
         // Small performance-based attribute drift after every match
-        // (مطلب: القوة والذكاء وقوة التسديد تتغير تغييراً بسيطاً).
+        // (Gereksinim).
         player.profile.applyMatchDevelopment(
           rating: rating,
           matchGoals: player.matchGoals,
@@ -4868,7 +5167,7 @@ class MatchEngine {
     fouler.profile.foulsCommitted += 1;
     fouler.matchFoulsCommitted += 1;
     // A goalkeeper involved in the foul ends up flat on the ground and
-    // needs a moment to get back up (مطلب: الحارس بعد الخطأ يبقى واقعاً).
+    // needs a moment to get back up (Gereksinim).
     if (fouler.isGoalkeeper) {
       fouler
         ..keeperGroundTimer = math.max(fouler.keeperGroundTimer, 1.5)
@@ -4935,7 +5234,7 @@ class MatchEngine {
 
   /// Human-readable on-pitch window for a player, used by the VAR panel:
   /// a player who already left the match shows exactly when he was playing
-  /// (مطلب عرض فترة تواجد اللاعب في الفار).
+  /// (Gereksinim).
   String presenceWindowFor(PlayerGame? player) {
     if (player == null) {
       return '';
@@ -4945,9 +5244,9 @@ class MatchEngine {
     final stillOn = !player.isSentOff &&
         teamById(player.teamId).players.contains(player);
     if (left == null || stillOn) {
-      return '${player.profile.name}: على الأرض من الدقيقة $entered';
+      return '${player.profile.name}: $entered. dakikadan beri yerde';
     }
-    return '${player.profile.name}: لعب $entered–${left.floor()}';
+    return '${player.profile.name}: $entered–${left.floor()} oynadi';
   }
 
   DisciplinaryEvent? _issueCard(
@@ -4995,7 +5294,7 @@ class MatchEngine {
       player.profile.redCards += 1;
       player.leftMatchMinute = minute;
       // A red card (straight or second yellow) costs exactly one team match
-      // (مطلب: عقاب الكرت الأحمر مباراة واحدة).
+      // (Gereksinim).
       suspension = GameConstants.redCardSuspensionMatches;
       player.profile.suspendedMatchesRemaining = math.max(
         player.profile.suspendedMatchesRemaining,
@@ -5054,10 +5353,10 @@ class MatchEngine {
       final rawDays = minimum + random.nextInt(spread);
       final durationFactor = (1.34 - resistance * 0.72).clamp(0.62, 1.30);
       final days = (rawDays * durationFactor).round().clamp(4, 90).toInt();
-      victim.profile.injuredDaysRemaining = days;
-      // The recovery clock starts now: every real day reduces the injury
-      // by one day.
-      victim.profile.injuryUpdatedAt = DateTime.now().millisecondsSinceEpoch;
+      // The injury is registered with its date, its duration and the
+      // calculated recovery date; each real day then removes 3–5 injury
+      // days (Gereksinim).
+      victim.profile.registerInjury(days: days);
       victim.isInjuredInMatch = true;
       injuryEvents.add(
         InjuryEvent(
@@ -5185,7 +5484,7 @@ class MatchEngine {
     );
     // The regulation 9.15 m wall distance plus a small extra step: standing
     // a little farther back lets a strong shot lift over the wall
-    // (مطلب: الحائط يبعد شوي حتى تعدي التسديدة من فوقه حسب شدتها).
+    // (Gereksinim).
     final lineCenter = ball.pos +
         towardGoal * (GameConstants.freeKickWallDistancePx + 13);
     final lateral = Vec2(-towardGoal.y, towardGoal.x);
@@ -5382,7 +5681,7 @@ class MatchEngine {
 
     // AI corners wait until every player has reached the set-piece shape —
     // but never more than a few seconds: a corner that cannot settle must
-    // still be taken so the match can never hang (مطلب منع التعليق).
+    // still be taken so the match can never hang .
     if (restartKind == RestartKind.corner && restartTeamId == id) {
       if (!canAiTakeCornerFor(team)) {
         return;
@@ -5554,18 +5853,40 @@ class MatchEngine {
           ),
         );
 
-    // Choose shot direction based on shooter skill
-    final skill = shooter.profile.shotSkill;
-    final preferredLane = skill > 0.7
-        ? (random.nextBool() ? PenaltyLane.leftHigh : PenaltyLane.rightHigh)
-        : (random.nextBool() ? PenaltyLane.leftLow : PenaltyLane.rightLow);
+    // The AI shooter reads his own attributes: a real finisher picks a
+    // corner high or low, a poor one blasts it down the middle more often.
+    final finishing = shooter.profile.finishingSkill;
+    final composure = shooter.profile.composureSkill;
+    final cornerAimChance = (0.42 + finishing * 0.42 + composure * 0.12)
+        .clamp(0.35, 0.92)
+        .toDouble();
+    PenaltyLane preferredLane;
+    if (random.nextDouble() > cornerAimChance) {
+      preferredLane = PenaltyLane.center;
+    } else if (finishing > 0.72 && random.nextBool()) {
+      preferredLane =
+          random.nextBool() ? PenaltyLane.leftHigh : PenaltyLane.rightHigh;
+    } else {
+      preferredLane =
+          random.nextBool() ? PenaltyLane.leftLow : PenaltyLane.rightLow;
+    }
 
     selectPenaltyShot(preferredLane);
+
+    // The strike itself follows the shooter's power, never a fixed value.
+    final strikePower =
+        (0.78 +
+                shooter.profile.shotPowerSkill * 0.55 +
+                composure * 0.12 +
+                random.nextDouble() * 0.18 -
+                (1 - finishing) * 0.10)
+            .clamp(0.72, 1.52)
+            .toDouble();
 
     // Give a human-controlled goalkeeper time to choose a dive direction.
     penalty.preparationTimer -= dt;
     if (penalty.preparationTimer <= 0) {
-      takeInteractivePenalty(0.92 + random.nextDouble() * 0.38);
+      takeInteractivePenalty(strikePower);
     }
   }
 }

@@ -141,8 +141,8 @@ class SavedGameData {
     List<TransferRequest>? transferRequests,
   }) : countries = countries ??
             <String>[
-              'قطر', 'السعودية', 'مصر', 'المغرب', 'البرازيل', 'الأرجنتين',
-              'فرنسا', 'إسبانيا', 'إنجلترا', 'ألمانيا', 'تركيا', 'العراق',
+              'Katar', 'Suudi Arabistan', 'Misir', 'Fas', 'Brezilya', 'Arjantin',
+              'Fransa', 'Ispanya', 'Ingiltere', 'Almanya', 'Turkiye', 'Irak',
             ],
        matchArchive = matchArchive ?? <FinishedMatchSummary>[],
        transferRequests = transferRequests ?? <TransferRequest>[];
@@ -173,7 +173,7 @@ class SavedGameData {
   final List<TransferRequest> transferRequests;
 
   /// The country catalogue managed from the admin section; every player and
-  /// every team can be assigned one of these (مطلب الدول).
+  /// every team can be assigned one of these (Gereksinim).
   final List<String> countries;
 
   List<TransferRequest> get pendingTransfers =>

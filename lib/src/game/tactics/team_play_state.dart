@@ -5,22 +5,22 @@ import '../enums/ai_play_style.dart';
 /// freezes a player's position — the current state decides what the team is
 /// trying to do, and the state is re-evaluated continuously during the match.
 enum TeamPlayState {
-  /// الاستحواذ — possession: stretch the pitch, create passing angles,
+  /// Topa sahip olma — possession: stretch the pitch, create passing angles,
   /// push the block forward.
   possession,
 
-  /// الانتقال الهجومي — attacking transition: exploit the space before the
+  /// Hucum gecisi — attacking transition: exploit the space before the
   /// opponent re-organises.
   attackingTransition,
 
-  /// الدفاع المنظم — organised defence: shrink the space, protect the goal.
+  /// Duzenli savunma — organised defence: shrink the space, protect the goal.
   organizedDefense,
 
-  /// الانتقال الدفاعي — defensive transition: stop the counter before it
+  /// Savunma gecisi — defensive transition: stop the counter before it
   /// becomes dangerous.
   defensiveTransition,
 
-  /// الضغط — pressing: force the mistake or win the ball back.
+  /// Pres — pressing: force the mistake or win the ball back.
   pressing,
 }
 

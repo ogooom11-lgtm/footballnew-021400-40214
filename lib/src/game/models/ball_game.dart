@@ -22,7 +22,7 @@ class BallGame {
   bool goalLineMissCommitted = false;
   bool dippingFreeKick = false;
   /// Normalised shot power (0..~1.7) of the last kick — a stronger free-kick
-  /// shot dips less and can clear the wall (مطلب تعبير الحائط حسب الشدة).
+  /// shot dips less and can clear the wall (Gereksinim).
   double shotPower01 = 0;
   double curve = 0;
   double spin = 0;

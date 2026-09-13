@@ -32,7 +32,9 @@ class BombanFutbolApp extends StatelessWidget {
       theme: ThemeData(
         brightness: Brightness.dark,
         colorScheme: colorScheme,
-        scaffoldBackgroundColor: background,
+        // Transparent so the app-wide stadium glow (see the builder below)
+        // is visible behind every page (Gereksinim: daha guzel tasarim).
+        scaffoldBackgroundColor: Colors.transparent,
         useMaterial3: true,
         fontFamily: 'Segoe UI',
         appBarTheme: AppBarTheme(
@@ -186,6 +188,33 @@ class BombanFutbolApp extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
           ),
         ),
+        scrollbarTheme: ScrollbarThemeData(
+          thickness: const WidgetStatePropertyAll(6),
+          radius: const Radius.circular(8),
+          thumbColor: WidgetStatePropertyAll(
+            gold.withValues(alpha: 0.35),
+          ),
+          trackColor: WidgetStatePropertyAll(
+            Colors.white.withValues(alpha: 0.04),
+          ),
+        ),
+        progressIndicatorTheme: const ProgressIndicatorThemeData(
+          color: emerald,
+          linearTrackColor: Color(0x22ffffff),
+          circularTrackColor: Color(0x22ffffff),
+        ),
+      ),
+      // A soft stadium glow behind every page keeps the new look consistent
+      // from the setup screens to the match HUD.
+      builder: (context, child) => DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(0, -0.35),
+            radius: 1.15,
+            colors: [Color(0xff0d2a20), Color(0xff07100c), background],
+          ),
+        ),
+        child: child ?? const SizedBox.shrink(),
       ),
       home: const SetupScreen(),
     );

@@ -173,14 +173,17 @@ class PlayerProfile {
     this.fitnessUpdatedAt = 0,
     this.marketValue = 1000000000,
     this.injuryUpdatedAt = 0,
-    this.country = 'غير محدد',
+    this.injuryStartedAt = 0,
+    this.injuryDurationDays = 0,
+    this.injuryEndsAt = 0,
+    this.country = 'Belirtilmemis',
     List<PlayerMatchRecord>? matchHistory,
   }) : matchHistory = matchHistory ?? <PlayerMatchRecord>[];
 
   final String id;
   String name;
 
-  /// The player's national country (مطلب الدول). Managed and assigned from
+  /// The player's national country (ulkeler). Managed and assigned from
   /// the admin section; shown on the player pages.
   String country;
   final double heightMeters;
@@ -274,8 +277,72 @@ class PlayerProfile {
   double marketValue;
 
   /// Timestamp (ms) of the last daily injury recovery, so injured players
-  /// lose one injury day per real day that passes.
+  /// lose injury days as real days pass.
   int injuryUpdatedAt;
+
+  /// When the injury happened (ms since epoch) — recorded so the medical
+  /// page can show the exact injury date.
+  int injuryStartedAt;
+
+  /// The full duration the doctors prescribed when the injury happened.
+  int injuryDurationDays;
+
+  /// Calculated date (ms since epoch) on which the injury is expected to be
+  /// over. Every real day that passes counts as [injuryDaysPerRealDay] days
+  /// of recovery, so the estimate matches the daily progress
+  /// (sakatlik).
+  int injuryEndsAt;
+
+  /// How many injury days one real day removes. A resilient player heals
+  /// 5 days per real day, a fragile one 3 — never less, never more
+  /// (gun).
+  int get injuryDaysPerRealDay =>
+      (3 + (dayaniklilikGucu / 100 * 2).round()).clamp(3, 5).toInt();
+
+  /// Register a fresh injury: date, prescribed duration and the estimated
+  /// end date are all stored together.
+  void registerInjury({required int days, DateTime? at}) {
+    final now = at ?? DateTime.now();
+    final duration = days.clamp(1, 400).toInt();
+    injuryStartedAt = now.millisecondsSinceEpoch;
+    injuryDurationDays = duration;
+    injuredDaysRemaining = duration;
+    injuryUpdatedAt = now.millisecondsSinceEpoch;
+    injuryEndsAt = now
+        .add(
+          Duration(
+            milliseconds:
+                (Duration.millisecondsPerDay * duration / injuryDaysPerRealDay)
+                    .round(),
+          ),
+        )
+        .millisecondsSinceEpoch;
+  }
+
+  /// The injury date as a short Turkish date (gg.aa.yyyy).
+  String get injuryDateText => injuryStartedAt <= 0
+      ? '-'
+      : _formatDate(DateTime.fromMillisecondsSinceEpoch(injuryStartedAt));
+
+  /// The expected recovery date as a short Turkish date (gg.aa.yyyy).
+  String get injuryEndText => injuryEndsAt <= 0
+      ? '-'
+      : _formatDate(DateTime.fromMillisecondsSinceEpoch(injuryEndsAt));
+
+  /// How much of the injury is already served, 0..1.
+  double get injuryProgress {
+    if (injuryDurationDays <= 0) {
+      return 0;
+    }
+    return (1 - injuredDaysRemaining / injuryDurationDays)
+        .clamp(0.0, 1.0)
+        .toDouble();
+  }
+
+  static String _formatDate(DateTime date) {
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${two(date.day)}.${two(date.month)}.${date.year}';
+  }
 
   final List<PlayerMatchRecord> matchHistory;
 
@@ -340,11 +407,14 @@ class PlayerProfile {
   /// Advances injury recovery and disciplinary suspension by one team match.
   void advanceUnavailableStatusAfterTeamMatch() {
     if (injuredDaysRemaining > 0) {
-      final recoveryDays = (5 + dayaniklilikSkill * 5).round();
+      final recoveryDays = injuryDaysPerRealDay;
       injuredDaysRemaining = math.max(
         0,
         injuredDaysRemaining - recoveryDays,
       ).toInt();
+      if (injuredDaysRemaining <= 0) {
+        injuryEndsAt = 0;
+      }
     }
     if (suspendedMatchesRemaining > 0) {
       suspendedMatchesRemaining -= 1;
@@ -385,11 +455,18 @@ class PlayerProfile {
     if (elapsedDays <= 0) {
       return false;
     }
+    // Each real day counts as 3–5 injury days, so a 30-day injury heals in
+    // about a week of real time instead of a whole month
+    // (Gereksinim).
+    final healedDays = elapsedDays * injuryDaysPerRealDay;
     injuredDaysRemaining = math.max(
       0,
-      injuredDaysRemaining - elapsedDays,
+      injuredDaysRemaining - healedDays,
     ).toInt();
     injuryUpdatedAt = nowMs;
+    if (injuredDaysRemaining <= 0) {
+      injuryEndsAt = 0;
+    }
     return true;
   }
 
@@ -736,8 +813,14 @@ class PlayerProfile {
       fitness: (json['fitness'] as num?)?.toDouble() ?? 1.0,
       fitnessUpdatedAt: (json['fitnessUpdatedAt'] as num?)?.toInt() ?? 0,
       marketValue: (json['marketValue'] as num?)?.toDouble() ?? 1000000000,
-      country: json['country'] as String? ?? 'غير محدد',
+      country: json['country'] as String? ?? 'Belirtilmemis',
       injuryUpdatedAt: (json['injuryUpdatedAt'] as num?)?.toInt() ?? 0,
+      injuryStartedAt: (json['injuryStartedAt'] as num?)?.toInt() ?? 0,
+      injuryDurationDays: (json['injuryDurationDays'] as num?)?.toInt() ?? 0,
+      injuryEndsAt: (json['injuryEndsAt'] as num?)?.toInt() ?? 0,
+      injuryStartedAt: (json['injuryStartedAt'] as num?)?.toInt() ?? 0,
+      injuryDurationDays: (json['injuryDurationDays'] as num?)?.toInt() ?? 0,
+      injuryEndsAt: (json['injuryEndsAt'] as num?)?.toInt() ?? 0,
       matchHistory: (json['matchHistory'] as List<dynamic>? ?? const [])
           .map((item) =>
               PlayerMatchRecord.fromJson(item as Map<String, dynamic>))
@@ -831,6 +914,9 @@ class PlayerProfile {
         'fitnessUpdatedAt': fitnessUpdatedAt,
         'marketValue': marketValue.round(),
         'injuryUpdatedAt': injuryUpdatedAt,
+        'injuryStartedAt': injuryStartedAt,
+        'injuryDurationDays': injuryDurationDays,
+        'injuryEndsAt': injuryEndsAt,
         'country': country,
         'matchHistory': matchHistory.map((r) => r.toJson()).toList(),
       };

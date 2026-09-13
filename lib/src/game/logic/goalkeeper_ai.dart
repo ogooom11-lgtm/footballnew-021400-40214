@@ -5,6 +5,7 @@ import '../enums/ai_difficulty.dart';
 import '../enums/kick_type.dart';
 import '../enums/team_id.dart';
 import '../math/vec2.dart';
+import '../models/ball_game.dart';
 import '../models/goalkeeper.dart';
 import '../models/player_game.dart';
 import '../models/shooting.dart';
@@ -269,6 +270,36 @@ class GoalkeeperAi {
     }
 
     final action = keeper.goalkeeperAction;
+    // EARLY-COMMIT GUARD: a keeper only leaves his feet inside the real
+    // reaction window. Before that he stays upright on his line, balanced
+    // and ready — he never dives or jumps at a ball that is still far away
+    // (Gereksinim).
+    final committing = action == GoalkeeperAction.diveLeft ||
+        action == GoalkeeperAction.diveRight ||
+        action == GoalkeeperAction.jump;
+    final alreadyCommitted =
+        keeper.keeperGroundTimer > 0 && keeper.jumpAnimationTimer > 0.10;
+    final commitWindow =
+        (0.13 + stats.decision * 0.15).clamp(0.10, 0.30).toDouble();
+    if (committing &&
+        !alreadyCommitted &&
+        prediction.timeToImpact > commitWindow) {
+      _setState(
+        keeper,
+        prediction.timeToImpact < 0.60
+            ? GoalkeeperState.ready
+            : GoalkeeperState.anticipating,
+        GoalkeeperAction.ready,
+      );
+      _moveWithAcceleration(
+        keeper,
+        _positioningTarget(keeper, team, context, stats),
+        stats,
+        dt,
+      );
+      _updatePredictionDebug(keeper, prediction, context);
+      return;
+    }
     final saveY = (keeper.goalkeeperDecisionTarget?.y ?? context.goalCenter.y)
         .clamp(context.goalTop - 12, context.goalBottom + 12)
         .toDouble();
@@ -349,10 +380,19 @@ class GoalkeeperAi {
         stats.decision * 0.24 +
         stats.reach * 0.16 -
         context.numberOfAttackers * 0.035;
-    if (distance < 7.5 && crossScore > 0.58) {
+    // The keeper is only allowed to attack a cross that is genuinely coming
+    // into his area: if the ball is not heading near him he holds his place
+    // instead of flying across his box
+    // (Gereksinim).
+    final ballComingToHim = _ballArrivesNearKeeper(engine.ball, keeper);
+    if (distance < 7.5 && crossScore > 0.58 && ballComingToHim) {
       final high = engine.ball.heightMeters > keeper.profile.heightMeters * 0.70;
-      if (high) {
+      // Even for a real cross, the jump waits until the ball is close
+      // enough to be reached — no leaping at a ball 1.5 seconds away.
+      if (high && _ballArrivesNearKeeper(engine.ball, keeper, maxFrames: 42)) {
         _startJump(keeper, stats);
+      } else if (high) {
+        _setState(keeper, GoalkeeperState.ready, GoalkeeperAction.ready);
       } else {
         _setState(keeper, GoalkeeperState.comingOut, GoalkeeperAction.moveForward);
       }
@@ -515,6 +555,29 @@ class GoalkeeperAi {
       keeper.lastDirection = keeper.goalkeeperVelocity.normalized();
     }
     keeper.keepInsideField();
+  }
+
+  /// Does the ball actually travel into the keeper's reach? A cross that
+  /// sails over him or lands far from him must never drag him out of his
+  /// goal, and must never make him fall to the turf.
+  bool _ballArrivesNearKeeper(
+    BallGame ball,
+    PlayerGame keeper, {
+    double maxFrames = 96,
+  }) {
+    final speed = ball.vel.length; // pixels per 1/60 s frame
+    if (speed < 0.25) {
+      return ball.pos.distanceTo(keeper.pos) < 40;
+    }
+    final toKeeper = keeper.pos - ball.pos;
+    final direction = ball.vel.normalized();
+    final framesToClosest = toKeeper.dot(direction) / speed;
+    if (framesToClosest < 0 || framesToClosest > maxFrames) {
+      // Going away from him, or more than 1.6 s away: not his ball.
+      return false;
+    }
+    final closest = ball.pos + ball.vel * framesToClosest;
+    return closest.distanceTo(keeper.pos) < 34;
   }
 
   void _startDive(

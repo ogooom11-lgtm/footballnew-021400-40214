@@ -87,17 +87,19 @@ class SavedTeamProfile {
     this.draws = 0,
     this.rating = 50,
     this.playStyle = AiPlayStyle.balanced,
-    this.country = 'غير محدد',
+    this.country = 'Belirtilmemis',
     this.aiDifficulty = AiDifficulty.medium,
     this.isDeleted = false,
     List<JerseyKit>? jerseyKits,
     this.activeKitIndex = 0,
+    List<String>? removedKitNames,
   }) : starterPlayerIds = starterPlayerIds ?? <String>{},
        roleByPlayerId = roleByPlayerId ?? <String, PlayerRole>{},
        slotByPlayerId = slotByPlayerId ?? <String, int>{},
        savedFormations = savedFormations ?? <SavedFormationPreset>[],
        matchHistory = matchHistory ?? <TeamMatchRecord>[],
-       jerseyKits = jerseyKits ?? JerseyFactory.defaultKits();
+       jerseyKits = jerseyKits ?? JerseyFactory.defaultKits(),
+       removedKitNames = removedKitNames ?? <String>[];
 
   final String id;
   String ownerAccountId; // can only be changed by admin tools
@@ -116,13 +118,17 @@ class SavedTeamProfile {
   double rating;
   AiPlayStyle playStyle;
 
-  /// The team's country (مطلب الدول): assigned from the admin section and
+  /// The team's country (ulkeler): assigned from the admin section and
   /// shown beside the team.
   String country;
   AiDifficulty aiDifficulty;
   bool isDeleted; // soft delete
   List<JerseyKit> jerseyKits;
   int activeKitIndex;
+
+  /// Names of the default (virtual) kits that were deleted for this team.
+  /// They are never re-added when the data is loaded again.
+  List<String> removedKitNames;
 
   int get played => wins + losses + draws;
 
@@ -214,7 +220,7 @@ class SavedTeamProfile {
         (s) => s.name == json['playStyle'],
         orElse: () => AiPlayStyle.balanced,
       ),
-      country: json['country'] as String? ?? 'غير محدد',
+      country: json['country'] as String? ?? 'Belirtilmemis',
       aiDifficulty: AiDifficulty.values.firstWhere(
         (d) => d.name == json['aiDifficulty'],
         orElse: () => AiDifficulty.medium,
@@ -223,7 +229,12 @@ class SavedTeamProfile {
       jerseyKits: JerseyFactory.completeKits(
         (json['jerseyKits'] as List<dynamic>?)
             ?.map((k) => JerseyKit.fromJson(k as Map<String, dynamic>)),
+        removed: (json['removedKitNames'] as List<dynamic>? ?? const [])
+            .map((item) => item.toString()),
       ),
+      removedKitNames: (json['removedKitNames'] as List<dynamic>? ?? const [])
+          .map((item) => item.toString())
+          .toList(),
       activeKitIndex: (json['activeKitIndex'] as num?)?.toInt() ?? 0,
     );
   }
@@ -360,6 +371,7 @@ class SavedTeamProfile {
       'aiDifficulty': aiDifficulty.name,
       'isDeleted': isDeleted,
       'jerseyKits': jerseyKits.map((k) => k.toJson()).toList(),
+      'removedKitNames': removedKitNames,
       'activeKitIndex': activeKitIndex,
     };
   }
