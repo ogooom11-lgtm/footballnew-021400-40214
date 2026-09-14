@@ -197,12 +197,20 @@ class PenaltyLogic {
         (tooWeak ? 0.03 : 0) +
         (1 - shooter.profile.finishingSkill) * 0.07 +
         (1 - shooter.profile.composureSkill) * 0.08;
-    final saveChance = guessed
-        ? (height > 1.55 ? 0.24 : 0.20) + saveSkill * 0.14
-        : (keeperDirection == PenaltyLane.center &&
-                  shotLane == PenaltyLane.center
-              ? 0.16 + saveSkill * 0.10
-              : 0.03 + saveSkill * 0.05);
+    // The pressed power shapes the outcome too: a softly pressed kick
+    // travels slower and gives the keeper real extra time, while a full
+    // blast is harder to hold even when the side is read
+    // (مطلب: سرعة الكرة على حسب قوة الضغطة).
+    final powerNorm = ((clampedPower - 0.55) / 1.10).clamp(0.0, 1.0).toDouble();
+    final powerSaveBonus =
+        (1.0 - powerNorm) * 0.14 - (powerNorm > 0.8 ? 0.05 : 0.0);
+    final saveChance = (guessed
+            ? (height > 1.55 ? 0.24 : 0.20) + saveSkill * 0.14
+            : (keeperDirection == PenaltyLane.center &&
+                      shotLane == PenaltyLane.center
+                  ? 0.16 + saveSkill * 0.10
+                  : 0.03 + saveSkill * 0.05)) +
+        powerSaveBonus;
     final shooterBonus =
         (shooter.profile.heightMeters - 1.70) * 0.32 +
         shooter.profile.finishingSkill * 0.16 +

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../game/math/vec2.dart';
 import '../game/models/jersey_kit.dart';
 import '../game/models/player_game.dart';
 
@@ -65,38 +66,17 @@ class PlayerPainter {
       0,
       -jumpPhase * (player.isGoalkeeper ? 13 : 9) - runBob,
     );
-    if (player.isGoalkeeper && player.keeperGroundTimer > 0) {
-      final rect = Rect.fromCenter(
-        center: center,
-        width: player.radius * 2.9,
-        height: player.radius * 1.15,
+    if (player.isGoalkeeper) {
+      _paintKeeperBody(
+        canvas,
+        player,
+        center,
+        body,
+        border,
+        shortsColor,
+        socksColor,
+        jumpPhase,
       );
-      canvas.drawOval(rect, body);
-      canvas.drawOval(rect, border);
-    } else if (player.isGoalkeeper && jumpPhase > 0.02) {
-      // While diving/jumping the keeper stretches vertically — a narrow,
-      // tall body shape — instead of staying a plain circle.
-      final stretch = 0.55 + jumpPhase * 0.45;
-      final rect = Rect.fromCenter(
-        center: center.translate(0, -player.radius * 0.55),
-        width: player.radius * (2.1 - jumpPhase * 0.5),
-        height: player.radius * (2.05 + jumpPhase * 1.1),
-      );
-      canvas.drawOval(rect, body);
-      canvas.drawOval(rect, border);
-      if (stretch > 0.85) {
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(
-            Rect.fromCenter(
-              center: center.translate(0, player.radius * 1.05),
-              width: player.radius * 1.1,
-              height: player.radius * 0.45,
-            ),
-            const Radius.circular(2),
-          ),
-          Paint()..color = shortsColor,
-        );
-      }
     } else {
       canvas.drawCircle(center, player.radius, body);
       canvas.drawRRect(
@@ -224,8 +204,247 @@ class PlayerPainter {
     );
   }
 
+  /// Dedicated goalkeeper body per state — the keeper never looks like a
+  /// plain outfield circle again: mid-dive he is stretched and tilted in
+  /// the dive direction, on the ground he lies flat, while getting up he
+  /// pushes himself upright, with the ball he hugs it, after a save the
+  /// arms go up, and in the ready stance he crouches with the gloves wide
+  /// (مطلب: تفاعلات مخصصة للحارس في كل حالة).
+  void _paintKeeperBody(
+    Canvas canvas,
+    PlayerGame player,
+    Offset center,
+    Paint body,
+    Paint border,
+    Color shortsColor,
+    Color socksColor,
+    double jumpPhase,
+  ) {
+    final r = player.radius;
+    final glovePaint = Paint()..color = const Color(0xfff3f6ff);
+    final gloveBorder = Paint()
+      ..color = Colors.black.withValues(alpha: 0.65)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.9;
+
+    // -------- 1) Mid-dive: stretched body tilted along the dive ---------
+    final diving = player.keeperGroundTimer > 0 &&
+        player.jumpAnimationTimer > 0.10 &&
+        player.keeperState == 'atlayis';
+    if (diving) {
+      final dir = player.lastDirection.lengthSquared > 0.003
+          ? player.lastDirection.normalized()
+          : Vec2(1, 0);
+      final angle = math.atan2(dir.y, dir.x);
+      canvas.save();
+      canvas.translate(center.dx, center.dy - jumpPhase * 4);
+      canvas.rotate(angle);
+      final stretch = Rect.fromCenter(
+        center: Offset.zero,
+        width: r * 3.05,
+        height: r * 1.32,
+      );
+      canvas.drawOval(stretch, body);
+      canvas.drawOval(stretch, border);
+      // Shorts near the trailing hip.
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromCenter(
+            center: Offset(-r * 0.85, 0),
+            width: r * 0.85,
+            height: r * 1.1,
+          ),
+          const Radius.circular(2),
+        ),
+        Paint()..color = shortsColor,
+      );
+      // Both gloves reach toward the ball side of the dive.
+      canvas.drawCircle(Offset(r * 1.72, -r * 0.28), r * 0.38, glovePaint);
+      canvas.drawCircle(Offset(r * 1.72, r * 0.28), r * 0.38, glovePaint);
+      canvas.drawCircle(Offset(r * 1.72, -r * 0.28), r * 0.38, gloveBorder);
+      canvas.drawCircle(Offset(r * 1.72, r * 0.28), r * 0.38, gloveBorder);
+      canvas.restore();
+      // Motion streaks trailing the dive.
+      final streak = Paint()
+        ..color = Colors.white.withValues(alpha: 0.34)
+        ..strokeWidth = 1.6
+        ..strokeCap = StrokeCap.round;
+      final back = Offset(-dir.x, -dir.y);
+      final side = Offset(-dir.y, dir.x);
+      for (var i = 0; i < 3; i++) {
+        final start = center +
+            back * (r * 1.7 + i * 5.5) +
+            side * ((i - 1) * 4.2);
+        canvas.drawLine(start, start + back * 7, streak);
+      }
+      return;
+    }
+
+    // -------- 2) On the ground / getting up ------------------------------
+    if (player.keeperGroundTimer > 0) {
+      final rising = player.keeperGroundTimer <= 0.24;
+      if (rising) {
+        // Getting up: the flat body tilts upright as the timer runs out,
+        // one arm still pushing off the ground.
+        final progress =
+            (1 - player.keeperGroundTimer / 0.24).clamp(0.0, 1.0).toDouble();
+        final rect = Rect.fromCenter(
+          center: center.translate(0, -r * 0.4 * progress),
+          width: r * (2.9 - 1.45 * progress),
+          height: r * (1.15 + 1.15 * progress),
+        );
+        canvas.drawOval(rect, body);
+        canvas.drawOval(rect, border);
+        final pushArm = Paint()
+          ..color = body.color
+          ..strokeWidth = 2.6
+          ..strokeCap = StrokeCap.round;
+        canvas.drawLine(
+          Offset(center.dx - r * 1.15, center.dy - r * 0.1),
+          Offset(center.dx - r * 0.65, center.dy + r * 0.95 * (1 - progress * 0.5)),
+          pushArm,
+        );
+        canvas.drawCircle(
+          Offset(center.dx - r * 0.65, center.dy + r * 0.95 * (1 - progress * 0.5)),
+          r * 0.24,
+          glovePaint,
+        );
+        return;
+      }
+      // Lying flat after the dive.
+      final rect = Rect.fromCenter(
+        center: center,
+        width: r * 2.9,
+        height: r * 1.15,
+      );
+      canvas.drawOval(rect, body);
+      canvas.drawOval(rect, border);
+      return;
+    }
+
+    // -------- 3) Airborne (jump launch / flight) -------------------------
+    if (jumpPhase > 0.02) {
+      final rect = Rect.fromCenter(
+        center: center.translate(0, -r * 0.55),
+        width: r * (2.1 - jumpPhase * 0.5),
+        height: r * (2.05 + jumpPhase * 1.1),
+      );
+      canvas.drawOval(rect, body);
+      canvas.drawOval(rect, border);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromCenter(
+            center: center.translate(0, r * 0.55),
+            width: r * 1.1,
+            height: r * 0.45,
+          ),
+          const Radius.circular(2),
+        ),
+        Paint()..color = shortsColor,
+      );
+      // Gloves reach up for the ball while the jump is in the air.
+      final gloveY = -r * (1.75 + jumpPhase * 0.9);
+      canvas.drawCircle(center.translate(-r * 0.72, gloveY), r * 0.34, glovePaint);
+      canvas.drawCircle(center.translate(r * 0.72, gloveY), r * 0.34, glovePaint);
+      canvas.drawCircle(center.translate(-r * 0.72, gloveY), r * 0.34, gloveBorder);
+      canvas.drawCircle(center.translate(r * 0.72, gloveY), r * 0.34, gloveBorder);
+      return;
+    }
+
+    // -------- 4) Standing states -----------------------------------------
+    switch (player.keeperState) {
+      case 'top elde':
+        // Holding the ball: it is hugged against the chest with both arms.
+        canvas.drawCircle(center, r, body);
+        canvas.drawCircle(center, r, border);
+        final heldBall = center.translate(0, -r * 0.45);
+        canvas.drawCircle(heldBall, r * 0.52, Paint()..color = Colors.white);
+        canvas.drawCircle(
+          heldBall,
+          r * 0.52,
+          Paint()
+            ..color = Colors.black
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1,
+        );
+        canvas.drawCircle(
+          heldBall.translate(-r * 0.55, r * 0.1),
+          r * 0.26,
+          glovePaint,
+        );
+        canvas.drawCircle(
+          heldBall.translate(r * 0.55, r * 0.1),
+          r * 0.26,
+          glovePaint,
+        );
+        return;
+      case 'kurtaris':
+        // Just saved: standing tall with both arms raised.
+        canvas.drawCircle(center, r, body);
+        canvas.drawCircle(center, r, border);
+        final arm = Paint()
+          ..color = body.color
+          ..strokeWidth = 2.6
+          ..strokeCap = StrokeCap.round;
+        canvas.drawLine(
+          center.translate(-r * 0.75, -r * 0.2),
+          center.translate(-r * 1.25, -r * 1.5),
+          arm,
+        );
+        canvas.drawLine(
+          center.translate(r * 0.75, -r * 0.2),
+          center.translate(r * 1.25, -r * 1.5),
+          arm,
+        );
+        canvas.drawCircle(center.translate(-r * 1.25, -r * 1.5), r * 0.26, glovePaint);
+        canvas.drawCircle(center.translate(r * 1.25, -r * 1.5), r * 0.26, glovePaint);
+        return;
+      case 'hazir':
+        // Ready stance: a slight crouch with the gloves spread wide.
+        final crouch = Rect.fromCenter(
+          center: center.translate(0, r * 0.12),
+          width: r * 2.15,
+          height: r * 1.82,
+        );
+        canvas.drawOval(crouch, body);
+        canvas.drawOval(crouch, border);
+        canvas.drawCircle(center.translate(-r * 1.28, r * 0.1), r * 0.30, glovePaint);
+        canvas.drawCircle(center.translate(r * 1.28, r * 0.1), r * 0.30, glovePaint);
+        canvas.drawCircle(center.translate(-r * 1.28, r * 0.1), r * 0.30, gloveBorder);
+        canvas.drawCircle(center.translate(r * 1.28, r * 0.1), r * 0.30, gloveBorder);
+        return;
+      default:
+        canvas.drawCircle(center, r, body);
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromCenter(
+              center: center.translate(0, r * 0.45),
+              width: r * 1.35,
+              height: r * 0.55,
+            ),
+            const Radius.circular(2),
+          ),
+          Paint()..color = shortsColor,
+        );
+        canvas.drawCircle(center, r, border);
+        return;
+    }
+  }
+
   void _keeperCue(Canvas canvas, PlayerGame player, Offset center) {
     if (player.keeperGroundTimer > 0) {
+      if (player.keeperGroundTimer <= 0.24) {
+        // Getting up: a small upward arrow above the keeper.
+        _text(
+          canvas,
+          '^',
+          center.translate(0, -player.radius - 14),
+          11,
+          const Color(0xffbde8ff),
+          FontWeight.w900,
+        );
+        return;
+      }
       // On the ground: no text above the keeper — just two short lines on
       // both sides of the body to show he is lying down.
       final sidePaint = Paint()
@@ -247,22 +466,21 @@ class PlayerPainter {
       return;
     }
     if (player.keeperState == 'top elde') {
-      final heldBall = center.translate(0, -player.radius - 5);
-      canvas.drawCircle(heldBall, 4.2, Paint()..color = Colors.white);
-      canvas.drawCircle(
-        heldBall,
-        4.2,
-        Paint()
-          ..color = Colors.black
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1,
-      );
       _text(
         canvas,
         'TOP ELDE',
-        center.translate(0, -27),
+        center.translate(0, -player.radius - 16),
         8,
         const Color(0xffbde8ff),
+        FontWeight.w900,
+      );
+    } else if (player.keeperState == 'kurtaris') {
+      _text(
+        canvas,
+        'KURTARIS!',
+        center.translate(0, -player.radius - 16),
+        8,
+        const Color(0xff8bff9e),
         FontWeight.w900,
       );
     }

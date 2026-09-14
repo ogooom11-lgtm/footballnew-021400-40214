@@ -3047,13 +3047,19 @@ class MatchEngine {
       }
     }
     final target = Vec2(goalX, targetY);
+    // The flight speed follows the pressed power DIRECTLY: a soft press
+    // sends a visibly slower ball toward the corner, a full press blasts
+    // it in — the corner alone no longer decides the speed
+    // (مطلب: الكرة تروح على حسب قوة الضغطة على الزر).
     ball.release(
       direction: target - ball.pos,
-      power: 1.12 + result.power * 0.22,
+      power: 0.52 + result.power * 0.66,
       toucher: shooter,
       receiver: null,
       kickType: KickType.shoot,
       loft: loft,
+      shotType: ShotType.power,
+      shotPower01: (result.power / 1.65).clamp(0.0, 1.0).toDouble(),
     );
 
     final keeperGoalX = defending.side == TeamSide.left

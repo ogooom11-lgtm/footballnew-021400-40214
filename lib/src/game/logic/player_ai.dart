@@ -20,6 +20,8 @@ import 'match_engine.dart';
 enum DefensiveDuty {
   protectGoal,
   pressCarrier,
+  pressSupport,
+  blockPath,
   markStriker,
   coverPresser,
   closeLane,
@@ -130,6 +132,18 @@ class PlayerAi {
         case DefensiveDuty.pressCarrier:
           finalTarget = _pressTarget(player, team, engine, context);
           force += 0.12;
+        case DefensiveDuty.pressSupport:
+          // The SECOND presser: he pinches from the other side instead of
+          // stacking on top of the first presser — two pressers is the max,
+          // nobody else leaves his spot (مطلب: كحد اكثر زميلين يضغطو).
+          finalTarget = _secondPressTarget(player, team, engine, context);
+          force += 0.08;
+        case DefensiveDuty.blockPath:
+          // One defender stands directly on the carrier's running path so
+          // the attack always meets a body in front of it
+          // (مطلب: حدا يكون في طريق اللاعب مشان يسكر عليه).
+          finalTarget = _blockPathTarget(engine.ball.owner!, team, engine);
+          force += 0.07;
         case DefensiveDuty.markStriker:
           final striker = _mostAdvancedOpponentAttacker(opponent, engine);
           if (striker != null) {
@@ -200,11 +214,11 @@ class PlayerAi {
             !player.isGoalkeeper &&
             (chase == player ||
                 _isSecondChaser(player, chase, team, engine) ||
-                player.role.isDefender ||
-                player.role == PlayerRole.defensiveMidfielder)) {
+                _isClosestBoxDefender(player, team, engine))) {
           // A ball bouncing around our own box must be smashed away
-          // immediately — defenders never dribble there
-          // (مطلب: يبعدو كل كرة بتجيهون تلقائي).
+          // immediately — but only by the closest defender so the box
+          // never fills with a swarm of team-mates
+          // (مطلب: يبعدو كل كرة بتجيهون تلقائي، بدون تجمهر).
           finalTarget = _interceptionPoint(player, engine);
           force += 0.16;
         } else if (chase == player) {
@@ -254,15 +268,36 @@ class PlayerAi {
       }
     }
 
-    // 2) Stop the danger: the designated presser engages the carrier.
-    if (_isDesignatedPresser(player, team, carrier, context, engine)) {
+    // 2) Stop the danger: AT MOST TWO players engage the carrier — the
+    // designated presser and, only when already close, one helper. Everyone
+    // else keeps his position (مطلب: ما كل الفريق يركض ورا الكرة).
+    final pressers = _activePressers(team, carrier, context, engine);
+    final pressRank = pressers.indexWhere((p) => p == player);
+    if (pressRank == 0) {
       return DefensiveDuty.pressCarrier;
+    }
+    if (pressRank == 1) {
+      return DefensiveDuty.pressSupport;
+    }
+
+    // 2.5) Someone must stand in the carrier's running path and wall him
+    // off — the nearest free defender between the pressers and the goal.
+    // Only when the attack actually reaches our side of the pitch, so the
+    // block never drags a defender out of position during build-up
+    // (مطلب: لازم حدا يكون في طريق اللاعب).
+    final carrierInOurHalf = team.attackDirection == 1
+        ? carrier.pos.x < GameConstants.virtualWidth * 0.55
+        : carrier.pos.x > GameConstants.virtualWidth * 0.45;
+    if ((role.isDefender || role == PlayerRole.defensiveMidfielder) &&
+        (context.ballZone.isHot || carrierInOurHalf) &&
+        _isPathBlocker(player, team, carrier, engine, pressers)) {
+      return DefensiveDuty.blockPath;
     }
 
     // 3) Cover the presser: the closest defender behind the presser picks
     // up the space/second man so no dangerous gap opens (plan item 15).
     if (role.isDefender || role == PlayerRole.defensiveMidfielder) {
-      final presser = _designatedPresser(team, carrier, context, engine);
+      final presser = pressers.isEmpty ? null : pressers.first;
       if (presser != null && presser != player && _isNaturalCover(player, team, presser)) {
         return DefensiveDuty.coverPresser;
       }
@@ -288,9 +323,34 @@ class PlayerAi {
     return DefensiveDuty.holdShape;
   }
 
+  /// How far a player may roam from his position before a press becomes
+  /// reckless. Defenders are CAUTIOUS: they hold their line and only step
+  /// out when the carrier actually comes near them; midfielders and
+  /// attackers roam further because losing their spot costs less
+  /// (مطلب: الدفاع حذر، يضغط فقط إذا اقترب اللاعب منه).
+  double _pressRangeFor(PlayerGame player, TacticalContext context) {
+    final hot = context.ballZone.isHot;
+    if (player.role.group == RoleGroup.centralDefence) {
+      return hot ? 245 : 168;
+    }
+    if (player.role.isDefender) {
+      return hot ? 265 : 185;
+    }
+    if (player.role == PlayerRole.defensiveMidfielder) {
+      return hot ? 290 : 225;
+    }
+    if (player.role.isMidfield || player.role.isWide) {
+      return hot ? 300 : 260;
+    }
+    // Attackers contribute to the defence too: they engage when the ball
+    // comes into their neighbourhood instead of waiting up the pitch
+    // (مطلب: المهاجمون ولاعبو الوسط يساهمون ويحاولون أخذ الكرة).
+    return hot ? 285 : 245;
+  }
+
   /// The player who engages the ball carrier: chosen from pressing priority
-  /// and real reachability — never the goalkeeper, never the whole team
-  /// (plan item 6).
+  /// and real reachability — never the goalkeeper, never the whole team,
+  /// and only inside his own pressing radius (plan item 6).
   PlayerGame? _designatedPresser(
     TeamGame team,
     PlayerGame carrier,
@@ -304,11 +364,12 @@ class PlayerAi {
         continue;
       }
       final distance = player.pos.distanceTo(carrier.pos);
-      if (distance > 430) {
+      final limit = _pressRangeFor(player, context);
+      if (distance > limit) {
         continue;
       }
       final stateBias = context.playState.rolePressBias(player.role, context.style);
-      final reach = 1.0 - (distance / 430).clamp(0.0, 1.0);
+      final reach = 1.0 - (distance / limit).clamp(0.0, 1.0);
       var score = stateBias * 1.4 + player.role.pressingPriority + reach * 0.8;
       // Sticky pressing: the current presser keeps the job unless someone
       // is clearly better, so control never flickers between players.
@@ -326,15 +387,113 @@ class PlayerAi {
     return best;
   }
 
-  bool _isDesignatedPresser(
-    PlayerGame player,
+  /// The pressing unit: the designated presser plus, AT MOST, one helper —
+  /// and the helper must already be near the carrier. Nobody sprints in
+  /// from far away, so the shape stays intact around the press
+  /// (مطلب: اللاعب يشوف زميله ضاغط، والباقي قريب بالجوار).
+  List<PlayerGame> _activePressers(
     TeamGame team,
     PlayerGame carrier,
     TacticalContext context,
     MatchEngine engine,
   ) {
-    final presser = _designatedPresser(team, carrier, context, engine);
-    return presser == player;
+    final primary = _designatedPresser(team, carrier, context, engine);
+    if (primary == null) {
+      return const [];
+    }
+    PlayerGame? helper;
+    var bestScore = -1.0;
+    for (final player in team.players) {
+      if (player == primary || player.isGoalkeeper || player.isSentOff) {
+        continue;
+      }
+      final distance = player.pos.distanceTo(carrier.pos);
+      if (distance > 158) {
+        continue;
+      }
+      final score = (1.0 - distance / 158) +
+          player.role.pressingPriority * 0.35 +
+          (player.role.isDefender ? 0.18 : 0);
+      if (score > bestScore) {
+        bestScore = score;
+        helper = player;
+      }
+    }
+    return helper == null ? [primary] : [primary, helper];
+  }
+
+  /// Is [player] the one who walls off the carrier's running path? The
+  /// closest free defender to the block point who is neither of the two
+  /// pressers (مطلب: حدا يسكّر طريق اللاعب).
+  bool _isPathBlocker(
+    PlayerGame player,
+    TeamGame team,
+    PlayerGame carrier,
+    MatchEngine engine,
+    List<PlayerGame> pressers,
+  ) {
+    final blockPoint = _blockPathTarget(carrier, team, engine);
+    PlayerGame? best;
+    var bestDistance = 205.0;
+    for (final mate in team.players) {
+      if (mate.isGoalkeeper ||
+          mate.isSentOff ||
+          pressers.contains(mate)) {
+        continue;
+      }
+      if (!(mate.role.isDefender ||
+          mate.role == PlayerRole.defensiveMidfielder)) {
+        continue;
+      }
+      final distance = mate.pos.distanceTo(blockPoint);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = mate;
+      }
+    }
+    return best == player;
+  }
+
+  /// The point that cuts the carrier's path: his position pushed along his
+  /// current movement (or toward our goal when he is standing still).
+  Vec2 _blockPathTarget(
+    PlayerGame carrier,
+    TeamGame team,
+    MatchEngine engine,
+  ) {
+    final goalCenter = engine.goalCenterFor(team);
+    final dir = carrier.velocity.length > 26
+        ? carrier.velocity.normalized()
+        : (goalCenter - carrier.pos).normalized(Vec2(0, 1));
+    final target = carrier.pos + dir * 82;
+    target.clampTo(
+      GameConstants.leftBound + 26,
+      GameConstants.topBound + 26,
+      GameConstants.rightBound - 26,
+      GameConstants.bottomBound - 26,
+    );
+    return target;
+  }
+
+  /// The helper's target: pinch the carrier from the opposite side of the
+  /// first presser, slightly goal-side — the carrier is boxed in between
+  /// two bodies instead of being chased by a line of players.
+  Vec2 _secondPressTarget(
+    PlayerGame player,
+    TeamGame team,
+    MatchEngine engine,
+    TacticalContext context,
+  ) {
+    final carrier = engine.ball.owner!;
+    final primary = _designatedPresser(team, carrier, context, engine);
+    if (primary == null || primary == player) {
+      return carrier.pos.copy();
+    }
+    final goalCenter = engine.goalCenterFor(team);
+    final goalSide = (goalCenter - carrier.pos).normalized(Vec2(0, 1));
+    final primarySide = (primary.pos - carrier.pos).normalized(Vec2(0, 1));
+    final pinch = goalSide * 0.62 - primarySide * 0.38;
+    return carrier.pos + pinch.normalized(Vec2(0, 1)) * 26;
   }
 
   /// The opponent's most advanced attacker (the striker to man-mark).
@@ -893,6 +1052,33 @@ class PlayerAi {
       }
     }
     return secondClosest;
+  }
+
+  /// The single closest defender to a loose ball in our own box — he joins
+  /// the clearance, everyone else keeps his marking position.
+  bool _isClosestBoxDefender(
+    PlayerGame player,
+    TeamGame team,
+    MatchEngine engine,
+  ) {
+    if (!player.role.isDefender &&
+        player.role != PlayerRole.defensiveMidfielder) {
+      return false;
+    }
+    for (final mate in team.players) {
+      if (mate == player ||
+          mate.isGoalkeeper ||
+          mate.isSentOff ||
+          (!mate.role.isDefender &&
+              mate.role != PlayerRole.defensiveMidfielder)) {
+        continue;
+      }
+      if (mate.pos.distanceTo(engine.ball.pos) <
+          player.pos.distanceTo(engine.ball.pos)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /// Where the ball will realistically be reachable — the chaser runs to
