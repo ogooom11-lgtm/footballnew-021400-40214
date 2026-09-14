@@ -27,6 +27,17 @@ class PlayerGame {
   /// This lets players walk into shape rather than teleporting on set pieces.
   Vec2? restartTarget;
   Vec2 lastDirection = Vec2(1, 0);
+
+  /// Current movement velocity in px/s. Movement is integrated with
+  /// acceleration and friction (see MatchEngine._applyMomentum), so a
+  /// player builds up speed, bleeds it in sharp turns and brakes into
+  /// his tactical target instead of teleporting at constant speed.
+  Vec2 velocity = Vec2.zero();
+
+  /// Accumulated running distance used purely by the renderer to phase
+  /// the run-bob animation — every player bobs with his own stride.
+  double runPhase = 0;
+
   bool controlled = false;
   double aiCooldown = 0;
   double tackleContactCooldown = 0;

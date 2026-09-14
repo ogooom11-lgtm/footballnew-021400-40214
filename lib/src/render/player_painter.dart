@@ -16,12 +16,16 @@ class PlayerPainter {
     bool showControlledName = true,
     JerseyKit? jerseyKit,
     JerseyKit? goalkeeperKit,
+    double pulsePhase = 0,
   }) {
     final isKeeper = player.isGoalkeeper;
     final playerColor = isKeeper && goalkeeperKit != null
         ? goalkeeperKit.shirtColor
         : jerseyKit?.shirtColor ?? color;
     final shortsColor = jerseyKit?.shortsColor ?? color;
+    final socksColor = isKeeper && goalkeeperKit != null
+        ? goalkeeperKit.socksColor
+        : jerseyKit?.socksColor ?? Colors.white;
     final numberClr = isKeeper && goalkeeperKit != null
         ? goalkeeperKit.numberColor
         : jerseyKit?.numberColor ?? Colors.white;
@@ -39,7 +43,28 @@ class PlayerPainter {
                     (player.jumpAnimationTimer / jumpDuration).clamp(0.0, 1.0)) *
                 math.pi,
           );
-    final center = rawCenter.translate(0, -jumpPhase * (player.isGoalkeeper ? 13 : 9));
+    // Ground shadow: shrinks and fades while the player is airborne.
+    final shadowScale = (1 - jumpPhase * 0.45).clamp(0.4, 1.0);
+    final shadow = Paint()
+      ..color = Colors.black.withValues(alpha: 0.28 * shadowScale)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.2);
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: rawCenter.translate(0, player.radius * 0.78),
+        width: player.radius * 2.05 * shadowScale,
+        height: player.radius * 0.68 * shadowScale,
+      ),
+      shadow,
+    );
+    // Run bob: a tiny vertical bounce driven by the distance covered,
+    // so sprinting players visibly pump instead of gliding.
+    final runBob = math.sin(player.runPhase * 2.2) *
+        1.15 *
+        player.movementIntensity.clamp(0.0, 1.0);
+    final center = rawCenter.translate(
+      0,
+      -jumpPhase * (player.isGoalkeeper ? 13 : 9) - runBob,
+    );
     if (player.isGoalkeeper && player.keeperGroundTimer > 0) {
       final rect = Rect.fromCenter(
         center: center,
@@ -85,6 +110,18 @@ class PlayerPainter {
         ),
         Paint()..color = shortsColor,
       );
+      // Socks: a thin band under the shorts in the kit's sock colour.
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromCenter(
+            center: center.translate(0, player.radius * 0.86),
+            width: player.radius * 1.05,
+            height: player.radius * 0.30,
+          ),
+          const Radius.circular(2),
+        ),
+        Paint()..color = socksColor,
+      );
       canvas.drawCircle(center, player.radius, border);
     }
     if (player.isGoalkeeper) {
@@ -114,13 +151,15 @@ class PlayerPainter {
       );
     }
     if (player.controlled && showControlledName) {
+      // Breathing selection ring: gently expands and brightens on a loop.
+      final pulse = (math.sin(pulsePhase * 5.2) + 1) / 2;
       canvas.drawCircle(
         center,
-        player.radius + 7,
+        player.radius + 7 + pulse * 1.6,
         Paint()
-          ..color = Colors.white
+          ..color = Colors.white.withValues(alpha: 0.72 + pulse * 0.28)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 2,
+          ..strokeWidth = 2 + pulse * 0.8,
       );
     }
     _text(

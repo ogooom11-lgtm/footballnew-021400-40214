@@ -227,9 +227,13 @@ class TeamGame {
       }
       players[i]
         ..role = spot.role
-        ..number = spot.number
+        // Every kick-off restores the player's OWN shirt number (edited on
+        // the team pages) instead of overwriting it with the formation
+        // slot number.
+        ..number = players[i].profile.number ?? spot.number
         ..homePos = pitchPoint(spot.x, spot.y, side)
         ..pos.setFrom(pitchPoint(spot.x, spot.y, side))
+        ..velocity = Vec2.zero()
         ..aiCooldown = 0
         ..manualOverride = 0
         ..movementIntensity = 0
@@ -258,7 +262,8 @@ class TeamGame {
       final spot = plan.spots[i];
       players[i]
         ..role = spot.role
-        ..number = spot.number
+        // Keep the player's personal shirt number (see resetPositions).
+        ..number = players[i].profile.number ?? spot.number
         ..homePos = pitchPoint(spot.x, spot.y, side);
     }
     resetDirections();

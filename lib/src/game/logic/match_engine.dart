@@ -47,12 +47,14 @@ class MatchEngine {
       blueTeam = TeamGame.fromSetup(
         setup: setup.blue,
         side: TeamSide.left,
-        color: const Color(0xfff4d03f),
+        // Fallback colours match the team names; actual shirts come from
+        // the selected kits whenever they exist.
+        color: const Color(0xff2f7bff),
       ),
       redTeam = TeamGame.fromSetup(
         setup: setup.red,
         side: TeamSide.right,
-        color: const Color(0xff0a4f93),
+        color: const Color(0xffe5484d),
       ),
       ball = BallGame(
         pos: Vec2(
@@ -118,6 +120,12 @@ class MatchEngine {
   double possessionStateTimer = 0;
 
   MatchBanner? banner;
+
+  /// Goal celebration state: while [goalFlashTimer] counts down the
+  /// renderer flashes the pitch, bulges the net of the goal that was hit
+  /// ([goalFlashSide]) and shows a big GOL splash.
+  double goalFlashTimer = 0;
+  TeamSide? goalFlashSide;
   bool varReviewActive = false;
   String? varReason;
   String? varReviewCategory;
@@ -342,6 +350,21 @@ class MatchEngine {
     final s = ((shown - m) * 60).floor();
     return '$m:${s.toString().padLeft(2, '0')}';
   }
+
+  /// Fade factor applied to the on-screen banner during the last moment
+  /// of its pause so it glides out instead of vanishing abruptly. VAR
+  /// reviews never fade — the user still has to read and decide.
+  double get bannerFade {
+    if (banner == null || varReviewActive || _pauseTimer <= 0) {
+      return 1.0;
+    }
+    return (_pauseTimer / 0.45).clamp(0.0, 1.0).toDouble();
+  }
+
+  /// Seconds remaining until the VAR review auto-applies the recommended
+  /// decision — the banner shows this countdown so the user knows how long
+  /// they have to choose manually.
+  double get varCountdown => varReviewActive ? math.max(0, _pauseTimer) : 0;
 
   TeamGame teamById(TeamId id) => id == TeamId.blue ? blueTeam : redTeam;
 
@@ -725,6 +748,7 @@ class MatchEngine {
       }
     }
 
+    _tickCarrierTouchQuality(dt);
     _ballPhysics.update(ball, dt);
     _handleBallContacts();
     _handleCornerJostle(dt);
@@ -759,9 +783,6 @@ class MatchEngine {
     for (final player in team.players) {
       player.controlled = player == controlled;
     }
-    if (direction.isZero) {
-      return;
-    }
     // The taker must stay at the touchline/corner arc until releasing the ball.
     if ((restartKind == RestartKind.throwIn ||
             restartKind == RestartKind.corner ||
@@ -770,31 +791,26 @@ class MatchEngine {
         ball.owner == controlled) {
       return;
     }
-    final step =
-        direction.normalized() *
-        controlled.speed *
-        _teamStrengthFactor(team) *
-        dt *
-        60;
-    controlled.pos = controlled.pos + step;
-    _drainStamina(controlled, step.length);
-    final movementDirection = step.normalized(
-      Vec2(team.attackDirection.toDouble(), 0),
+    // Momentum control: releasing the keys brakes the player out of his
+    // sprint instead of freezing him mid-stride.
+    if (direction.isZero) {
+      if (!controlled.velocity.isZero) {
+        _applyMomentum(controlled, Vec2.zero(), dt);
+      }
+      return;
+    }
+    var maxSpeed = controlled.speed * _teamStrengthFactor(team) * 60;
+    // Ball carriers protect the ball and feel its weight.
+    if (ball.owner == controlled) {
+      maxSpeed *= 0.86 + controlled.profile.balanceSkill * 0.10;
+    }
+    _applyMomentum(
+      controlled,
+      direction.normalized() *
+          maxSpeed *
+          direction.length.clamp(0.0, 1.0).toDouble(),
+      dt,
     );
-    controlled
-      ..turningIntensity = math.max(
-        controlled.turningIntensity,
-        ((1 - controlled.lastDirection.normalized().dot(movementDirection)) / 2)
-            .clamp(0.0, 1.0)
-            .toDouble(),
-      )
-      ..movementIntensity = math.max(
-        controlled.movementIntensity,
-        direction.length.clamp(0.0, 1.0).toDouble(),
-      )
-      ..lastDirection = movementDirection;
-    controlled.keepInsideField();
-    _clampRestartPosition(controlled);
     controlled.manualOverride = 0.28;
     if (controlled.pos.distanceTo(ball.pos) <
             controlled.radius + GameConstants.ballRadius + 8 &&
@@ -1157,6 +1173,7 @@ class MatchEngine {
         : GameConstants.leftBound + 88;
     next
       ..pos = Vec2(spotX, GameConstants.virtualHeight / 2)
+      ..velocity = Vec2.zero()
       ..lastDirection = Vec2(shooting.attackDirection.toDouble(), 0);
     ball
       ..owner = next
@@ -1280,38 +1297,158 @@ class MatchEngine {
     return vacancyAnchor?.copy();
   }
 
+  /// Momentum-based locomotion: players now accelerate toward their target
+  /// instead of teleporting at cruise speed, so turning, starting and
+  /// stopping carry a physical cost (مطلب الواقعية في الحركة).
+  /// [force] scales the target top speed: the keeper shuffles at 0.6 while
+  /// an all-out sprint passes 1.0.
   void moveTowards(PlayerGame player, Vec2 target, double force, double dt) {
     final diff = target - player.pos;
     if (diff.lengthSquared <= 1) {
       return;
     }
-    var step =
-        diff.normalized() *
-        player.speed *
-        _teamStrengthFactor(teamById(player.teamId)) *
-        force *
-        dt *
-        60;
-    if (step.length > diff.length) {
-      step = diff;
+    final team = teamById(player.teamId);
+    final clampedForce = force.clamp(0.05, 1.25).toDouble();
+    var maxSpeed =
+        player.speed * _teamStrengthFactor(team) * clampedForce * 60;
+    // Brake into the target so players decelerate before arriving instead
+    // of overshooting and oscillating.
+    if (diff.length < 26) {
+      maxSpeed *= (diff.length / 26).clamp(0.22, 1.0).toDouble();
     }
+    // Ball carriers protect the ball and feel its weight: slightly slower
+    // than an empty-handed sprint, with balance deciding how much.
+    final isCarrier = ball.owner == player;
+    if (isCarrier) {
+      maxSpeed *= 0.86 + player.profile.balanceSkill * 0.10;
+    }
+    _applyMomentum(player, diff.normalized() * maxSpeed, dt);
+  }
+
+  /// Heavy-touch simulation for the ball carrier (مطلب: الكرة تفلت عند
+  /// السرعة العالية أو الضغط): while dribbling fast or under close
+  /// pressure, a player with lower control lets the ball run loose — the
+  /// ball leaves his feet like a light pass and becomes a 50/50.
+  /// Set-pieces, penalties, restarts and the just-kicked grace window are
+  /// exempt so scripted situations never misfire.
+  void _tickCarrierTouchQuality(double dt) {
+    final owner = ball.owner;
+    if (owner == null || owner.isGoalkeeper) {
+      return;
+    }
+    if (restartKind != null ||
+        activePenalty != null ||
+        setPieceAttackTeamId != null ||
+        _recentKickerGrace > 0) {
+      return;
+    }
+    final control =
+        owner.profile.balanceSkill * 0.6 + owner.profile.composureSkill * 0.4;
+    final speedRatio =
+        owner.velocity.length / math.max(60.0, owner.speed * 60);
+    var chance = 0.0;
+    // Sprinting dribbles push the ball ahead of the feet.
+    if (speedRatio > 0.80) {
+      chance += (speedRatio - 0.80) * 0.35 * (1.1 - control);
+    }
+    // A defender within touching range turns every touch dangerous.
+    var nearestOpponent = double.infinity;
+    for (final opponent in opponentOf(teamById(owner.teamId)).players) {
+      if (opponent.isSentOff) {
+        continue;
+      }
+      final distance = opponent.pos.distanceTo(owner.pos);
+      if (distance < nearestOpponent) {
+        nearestOpponent = distance;
+      }
+    }
+    if (nearestOpponent <= 22) {
+      chance += ((22 - nearestOpponent) / 22) * 0.45 * (1 - control);
+    }
+    if (chance <= 0 || random.nextDouble() >= chance * dt) {
+      return;
+    }
+    final pushDirection = owner.lastDirection.normalized(
+      Vec2(teamById(owner.teamId).attackDirection.toDouble(), 0),
+    );
+    ball.release(
+      direction: pushDirection,
+      power: 0.30 + random.nextDouble() * 0.14,
+      toucher: owner,
+      kickType: KickType.pass,
+    );
+    // A loose touch is nobody's pass: kill the pass/assist chain.
+    ball
+      ..lastPasser = null
+      ..potentialAssister = null;
+    _recentKicker = owner;
+    _recentKickerGrace = 0.28;
+    owner.matchDribbles += 1;
+  }
+
+  /// The shared integration step of the momentum model: accelerate the
+  /// player's [velocity] toward [desiredVelocity], where turning sharply
+  /// bleeds off acceleration, then move. Used by AI, human control and
+  /// goalkeepers alike so every movement feels physical.
+  void _applyMomentum(PlayerGame player, Vec2 desiredVelocity, double dt) {
+    final team = teamById(player.teamId);
+    final clampedDesired =
+        desiredVelocity.length > player.speed * _teamStrengthFactor(team) * 1.25 * 60
+        ? desiredVelocity.normalized() *
+            (player.speed * _teamStrengthFactor(team) * 1.25 * 60)
+        : desiredVelocity;
+    final delta = clampedDesired - player.velocity;
+    if (delta.lengthSquared > 0.0001) {
+      var accelScale = 1.0;
+      if (!player.velocity.isZero && !clampedDesired.isZero) {
+        final turnAlignment = player.velocity
+            .normalized()
+            .dot(clampedDesired.normalized())
+            .clamp(-1.0, 1.0)
+            .toDouble();
+        // Running straight is effortless; a 180° turn barely accelerates.
+        accelScale = 0.55 + 0.45 * (turnAlignment + 1) / 2;
+      }
+      // Tired legs explode off the mark slower — acceleration follows
+      // stamina just like top speed does.
+      final staminaAccel = 0.62 + player.stamina * 0.38;
+      final maxDelta =
+          GameConstants.playerAcceleration * accelScale * staminaAccel * dt;
+      player.velocity = player.velocity +
+          (delta.length <= maxDelta
+              ? delta
+              : delta.normalized() * maxDelta);
+    }
+    // Releasing the stick (zero desired velocity) brakes the player down
+    // quickly but never instantly — the skid IS the realism.
+    if (clampedDesired.isZero && player.velocity.length < 0.6) {
+      player.velocity = Vec2.zero();
+    }
+    if (player.velocity.isZero) {
+      player.movementIntensity = math.max(
+        0,
+        player.movementIntensity - dt * 1.35,
+      );
+      return;
+    }
+    final step = player.velocity * dt;
     player.pos = player.pos + step;
     _drainStamina(player, step.length);
-    if (!step.isZero) {
-      final movementDirection = step.normalized();
-      player
-        ..turningIntensity = math.max(
-          player.turningIntensity,
-          ((1 - player.lastDirection.normalized().dot(movementDirection)) / 2)
-              .clamp(0.0, 1.0)
-              .toDouble(),
-        )
-        ..movementIntensity = math.max(
-          player.movementIntensity,
-          force.clamp(0.0, 1.0).toDouble(),
-        )
-        ..lastDirection = movementDirection;
-    }
+    // The running cycle animation is driven by the distance actually covered.
+    player.runPhase += step.length * 0.28;
+    final movementDirection = step.normalized();
+    final nominalTopSpeed = math.max(60.0, player.speed * 60);
+    player
+      ..turningIntensity = math.max(
+        player.turningIntensity,
+        ((1 - player.lastDirection.normalized().dot(movementDirection)) / 2)
+            .clamp(0.0, 1.0)
+            .toDouble(),
+      )
+      ..movementIntensity = (player.velocity.length / nominalTopSpeed)
+          .clamp(0.0, 1.0)
+          .toDouble()
+      ..lastDirection = movementDirection;
     player.keepInsideField();
     _clampRestartPosition(player);
   }
@@ -1731,6 +1868,8 @@ class MatchEngine {
   }
 
   void _tickCooldowns(double dt) {
+    // The goal celebration keeps animating during the post-goal pause.
+    goalFlashTimer = math.max(0, goalFlashTimer - dt);
     if (restartKind == RestartKind.corner) {
       _cornerPendingSeconds += dt;
     } else {
@@ -2568,6 +2707,7 @@ class MatchEngine {
       ..verticalVelocity = 0;
     restartPlayer
       ..pos = restartPos - Vec2(restartTeam.attackDirection * 16, 0)
+      ..velocity = Vec2.zero()
       ..lastDirection = Vec2(restartTeam.attackDirection.toDouble(), 0);
     _shapeRestartPlayers(restartTeam, defending, isCorner: isCorner);
     _startPause(
@@ -2597,6 +2737,10 @@ class MatchEngine {
     }
     final conceding = opponentOf(scoringTeam);
     scoringTeam.score += 1;
+    // Light up the celebration: flash, net bulge and GOL splash last for
+    // the whole goal pause.
+    goalFlashTimer = 1.7;
+    goalFlashSide = conceding.side;
     final netY = ball.pos.y
         .clamp(
           GameConstants.virtualHeight / 2 - GameConstants.goalPixelHeight / 2 + 8,
@@ -2654,6 +2798,9 @@ class MatchEngine {
         if (decision == 'cancel') {
           goalEvent.canceled = true;
           goalTimelineEvent.canceled = true;
+          // The celebration dies with the goal.
+          goalFlashTimer = 0;
+          goalFlashSide = null;
           scoringTeam.score = math.max(0, scoringTeam.score - 1).toInt();
           if (ball.lastTouch?.teamId == scoringTeam.id) {
             ball.lastTouch!.profile.goals = math.max(
@@ -2809,6 +2956,7 @@ class MatchEngine {
           : GameConstants.rightBound - 16;
       keeper
         ..pos = Vec2(goalLineX, GameConstants.virtualHeight / 2)
+        ..velocity = Vec2.zero()
         ..keeperState = 'top elde'
         ..manualOverride = 0.5;
       ball
@@ -2829,6 +2977,9 @@ class MatchEngine {
 
   void _recordPenaltyGoal(TeamGame scoringTeam, PenaltyKickResult result) {
     scoringTeam.score += 1;
+    // A penalty goal celebrates exactly like an open-play one.
+    goalFlashTimer = 1.7;
+    goalFlashSide = opponentOf(scoringTeam).side;
     final scorer = scoringTeam.players.where(
       (player) => player.profile.name == result.shooterName,
     );
@@ -2969,9 +3120,11 @@ class MatchEngine {
               sideOffset * 70 +
               (player.number % 5) * 18,
         );
+        player.velocity = Vec2.zero();
         player.keepInsideField();
       }
       shooter.pos = Vec2(spotX, GameConstants.virtualHeight / 2);
+      shooter.velocity = Vec2.zero();
       shooter.lastDirection = Vec2(shooting.attackDirection.toDouble(), 0);
       ball
         ..owner = shooter
@@ -2980,6 +3133,7 @@ class MatchEngine {
         ..heightMeters = 0
         ..verticalVelocity = 0;
       defending.goalkeeper.pos = Vec2(goalX, GameConstants.virtualHeight / 2);
+      defending.goalkeeper.velocity = Vec2.zero();
       return shooter;
     }
     // Edge of the penalty area (16-yard line), where the waiting players
@@ -3003,6 +3157,7 @@ class MatchEngine {
         boxEdgeX - d * ((attackerSlot % 2) * 22),
         centerY - 105 + attackerSlot * 30 + (player.number % 4) * 9,
       );
+      player.velocity = Vec2.zero();
       player.keepInsideField();
       attackerSlot += 1;
     }
@@ -3023,6 +3178,7 @@ class MatchEngine {
       GameConstants.virtualWidth / 2 - d * 130,
       centerY - 95,
     );
+    counterMan.velocity = Vec2.zero();
     counterMan.keepInsideField();
 
     var defenderSlot = 0;
@@ -3036,11 +3192,13 @@ class MatchEngine {
         defenseX - d * ((defenderSlot % 3) * 18),
         centerY - 92 + defenderSlot * 26,
       );
+      player.velocity = Vec2.zero();
       player.keepInsideField();
       defenderSlot += 1;
     }
 
     shooter.pos = Vec2(spotX, centerY);
+    shooter.velocity = Vec2.zero();
     shooter.lastDirection = Vec2(d.toDouble(), 0);
     ball
       ..owner = shooter
@@ -3049,6 +3207,7 @@ class MatchEngine {
       ..heightMeters = 0
       ..verticalVelocity = 0;
     defending.goalkeeper.pos = Vec2(goalX, centerY);
+    defending.goalkeeper.velocity = Vec2.zero();
     return shooter;
   }
 
@@ -3063,6 +3222,9 @@ class MatchEngine {
             () {
               minute = 45;
               period = MatchPeriod.secondHalf;
+              // Half-time breather: everyone recovers a meaningful chunk,
+              // like real players resting in the tunnel.
+              _recoverStaminaAll(0.10);
               _switchSidesAndRestart(TeamId.red);
             },
           );
@@ -3093,6 +3255,8 @@ class MatchEngine {
             () {
               minute = 105;
               period = MatchPeriod.extraSecond;
+              // The short extra-time break gives a smaller top-up.
+              _recoverStaminaAll(0.07);
               _switchSidesAndRestart(TeamId.red);
             },
           );
@@ -3400,6 +3564,7 @@ class MatchEngine {
           scorerPlayerId: player.id,
         );
         team.goals.add(goal);
+        _recalcWinnerIfFinished();
         return _recordTimelineEvent(
           kind: 'goal',
           title: 'VAR: GOL EKLENDI',
@@ -3530,6 +3695,7 @@ class MatchEngine {
       ..verticalVelocity = 0;
     keeper
       ..pos = _restartSpot! - Vec2(team.attackDirection * 16, 0)
+      ..velocity = Vec2.zero()
       ..lastDirection = Vec2(team.attackDirection.toDouble(), 0);
     _shapeRestartPlayers(team, opponentOf(team), isCorner: false);
   }
@@ -3589,6 +3755,28 @@ class MatchEngine {
       "VAR karari: ${goal.minute}' ${goal.scorerName}",
       2.0,
     );
+    // A cancelled goal also ends any running celebration visual.
+    if (goal.canceled) {
+      goalFlashTimer = 0;
+      goalFlashSide = null;
+    }
+    // VAR can flip the result even after the final whistle — the recorded
+    // winner must always follow the corrected score
+    // (مطلب: الفار يغير الفائز بعد نهاية المباراة).
+    _recalcWinnerIfFinished();
+  }
+
+  /// Re-derives [winner] from the live score once the match is over; used
+  /// after VAR decisions add/remove goals post-match.
+  void _recalcWinnerIfFinished() {
+    if (!finished) {
+      return;
+    }
+    winner = blueTeam.score == redTeam.score
+        ? null
+        : blueTeam.score > redTeam.score
+        ? TeamId.blue
+        : TeamId.red;
   }
 
   /// VAR can cancel any decision, applied instantly — no retroactive edits
@@ -3678,6 +3866,7 @@ class MatchEngine {
       if (canceling) {
         player
           ..pos = player.homePos.copy()
+          ..velocity = Vec2.zero()
           ..controlled = false
           // He is back on the pitch: his presence window closes at the
           // current minute again (مطلب نافذة حضور اللاعب في VAR).
@@ -4002,7 +4191,6 @@ class MatchEngine {
     if (amount <= 0) {
       return;
     }
-    final cap = playerFitnessCap();
     for (final player in allPlayers) {
       if (player.isSentOff) {
         continue;
@@ -4010,16 +4198,24 @@ class MatchEngine {
       final recovery = amount *
           (0.7 + player.profile.staminaSkill * 0.6) *
           (player.isGoalkeeper ? 1.2 : 1.0);
-      player.stamina = math.min(cap, player.stamina + recovery);
+      player.stamina = math.min(
+        playerFitnessCap(player),
+        player.stamina + recovery,
+      );
     }
   }
 
-  /// The stamina ceiling during a match: the player's long-term fitness.
-  double playerFitnessCap() => 1.0;
+  /// The stamina ceiling during a match: the player's pre-match fitness.
+  /// A player who arrives tired can never recover beyond the level he
+  /// started with — rest raises him back to his baseline, not above it.
+  double playerFitnessCap(PlayerGame player) =>
+      player.profile.fitness.clamp(0.18, 1.0).toDouble();
 
   /// Time-based fatigue: even standing players slowly tire so the match
   /// always shows visible tired legs and slower sprints late on
-  /// (مطلب ضروري: منطق التعب والطاقة).
+  /// (مطلب ضروري: منطق التعب والطاقة). Players who barely move catch a
+  /// small breath back — like real football, walking recovers, sprinting
+  /// burns.
   void _baselineStaminaDrain(double dt) {
     for (final player in allPlayers) {
       if (player.isSentOff) {
@@ -4028,6 +4224,19 @@ class MatchEngine {
       final load = player.isGoalkeeper
           ? 0.30
           : 0.55 + player.movementIntensity.clamp(0.0, 1.2);
+      if (!player.isGoalkeeper &&
+          player.movementIntensity < 0.22 &&
+          player.stamina < playerFitnessCap(player)) {
+        // Idle recovery: standing/walking players slowly recharge toward
+        // their fitness ceiling. Kept gentle so the overall match drain
+        // stays visible.
+        player.stamina = math.min(
+          playerFitnessCap(player),
+          player.stamina +
+              dt * 0.0010 * (0.55 + player.profile.staminaSkill * 0.65),
+        );
+        continue;
+      }
       player.stamina = math.max(
         0.12,
         player.stamina -
@@ -4078,27 +4287,22 @@ class MatchEngine {
     return teamMode(team);
   }
 
-  /// Direct player movement without AI check (used by AI itself).
+  /// Direct player movement without AI check (used by AI itself). Runs on
+  /// the same momentum model as human control, so AI players accelerate,
+  /// turn with effort and skid to a stop too.
   void _movePlayerDirect(PlayerGame player, Vec2 direction, double dt) {
     if (direction.isZero) {
+      if (!player.velocity.isZero) {
+        _applyMomentum(player, Vec2.zero(), dt);
+      }
       return;
     }
     final team = teamById(player.teamId);
-    final step = direction * player.speed * _teamStrengthFactor(team) * dt * 60;
-    player.pos = player.pos + step;
-    _drainStamina(player, step.length);
-    final movementDirection = direction.normalized();
-    player
-      ..turningIntensity = math.max(
-        player.turningIntensity,
-        ((1 - player.lastDirection.normalized().dot(movementDirection)) / 2)
-            .clamp(0.0, 1.0)
-            .toDouble(),
-      )
-      ..movementIntensity = 1.0
-      ..lastDirection = movementDirection;
-    player.keepInsideField();
-    _clampRestartPosition(player);
+    var maxSpeed = player.speed * _teamStrengthFactor(team) * 60;
+    if (ball.owner == player) {
+      maxSpeed *= 0.86 + player.profile.balanceSkill * 0.10;
+    }
+    _applyMomentum(player, direction.normalized() * maxSpeed, dt);
     player.manualOverride = 0.28;
     if (player.pos.distanceTo(ball.pos) <
             player.radius + GameConstants.ballRadius + 8 &&
@@ -4134,13 +4338,16 @@ class MatchEngine {
       }
     }
     if (restartKind == RestartKind.freeKick && restartTeamId != null &&
-        player.teamId != restartTeamId) {
+        player.teamId != restartTeamId && !player.isGoalkeeper) {
+      // Regulation 9.15 m minimum distance for opponents — goalkeepers are
+      // exempt because they must stay on their line.
       final away = player.pos - ball.pos;
-      if (away.length < 66) {
+      if (away.length < GameConstants.freeKickWallDistancePx) {
         final direction = away.normalized(
           Vec2(teamById(player.teamId).attackDirection.toDouble(), 0),
         );
-        player.pos = ball.pos + direction * 66;
+        player.pos = ball.pos +
+            direction * GameConstants.freeKickWallDistancePx;
         player.keepInsideField();
       }
     }
@@ -5144,6 +5351,7 @@ class MatchEngine {
     // Ball stays exactly on the foul/offside/handball spot while the taker
     // stands behind it.
     taker.pos = foulSpot - Vec2(team.attackDirection * 20, 0);
+    taker.velocity = Vec2.zero();
     taker.lastDirection = Vec2(team.attackDirection.toDouble(), 0);
     final nearGoal = foulSpot.distanceTo(goalCenterFor(team)) < 330;
     wallSelectionPending = nearGoal;
@@ -5195,6 +5403,7 @@ class MatchEngine {
       selected[index]
         ..restartTarget = null
         ..pos = wallPosition
+        ..velocity = Vec2.zero()
         ..lastDirection = towardGoal * -1;
       _lockedWallPlayerIds.add(selected[index].id);
       _lockedWallPositions[selected[index].id] = wallPosition.copy();
@@ -5253,6 +5462,7 @@ class MatchEngine {
       ..verticalVelocity = 0;
     taker
       ..pos = Vec2(spotX - team.attackDirection * 14, spotY)
+      ..velocity = Vec2.zero()
       ..lastDirection = Vec2(team.attackDirection.toDouble(), 0);
     _startPause('TAC', team.name, 0.6, null);
   }

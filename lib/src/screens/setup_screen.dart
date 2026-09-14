@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../app/page_routes.dart';
 import '../game/enums/ai_difficulty.dart';
 import '../game/enums/ai_play_style.dart';
 import '../game/enums/match_mode.dart';
@@ -55,6 +56,10 @@ class _SetupScreenState extends State<SetupScreen> {
       TextEditingController();
   bool _showAdminPasswordField = false;
   bool _adminPasswordError = false;
+
+  /// True while the match is being prepared: shows the bouncing-ball
+  /// loading splash instead of jumping straight into the game.
+  bool _startingMatch = false;
   int _pendingAdminTab = 5;
   int _adminSubTab = 0;
   String? _adminValueTeamId;
@@ -559,9 +564,9 @@ class _SetupScreenState extends State<SetupScreen> {
   Future<void> _openAccountDetail() async {
     await _save();
     if (!mounted) return;
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const AccountDetailScreen()));
+    await Navigator.of(context).push(
+      fadeSlideRoute(builder: (_) => const AccountDetailScreen()),
+    );
     _load();
   }
 
@@ -634,9 +639,19 @@ class _SetupScreenState extends State<SetupScreen> {
     if (!mounted) {
       return;
     }
-    final result = await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => GameScreen(setup: setup)));
+    // A brief, visible preparation moment: the bouncing ball splash plays
+    // while the match is assembled.
+    setState(() => _startingMatch = true);
+    await Future<void>.delayed(const Duration(milliseconds: 650));
+    if (!mounted) {
+      return;
+    }
+    final result = await Navigator.of(context).push(
+      fadeSlideRoute(builder: (_) => GameScreen(setup: setup)),
+    );
+    if (mounted) {
+      setState(() => _startingMatch = false);
+    }
     if (result is FinishedMatchSummary) {
       _applyMatchSummary(data, result);
       await _save();
@@ -784,7 +799,9 @@ class _SetupScreenState extends State<SetupScreen> {
       autofocus: true,
       onKeyEvent: _handleSetupKey,
       child: Scaffold(
-        body: Container(
+        body: Stack(
+          children: [
+            Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
@@ -802,11 +819,49 @@ class _SetupScreenState extends State<SetupScreen> {
                   const SizedBox(height: 14),
                   _setupTabs(),
                   const SizedBox(height: 14),
-                  Expanded(child: _setupPage(data)),
+                  // Tab switch animation: the new page fades in while
+                  // rising slightly into place.
+                  Expanded(
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeIn,
+                      transitionBuilder: (child, animation) {
+                        return FadeTransition(
+                          opacity: animation,
+                          child: SlideTransition(
+                            position: Tween<Offset>(
+                              begin: const Offset(0, 0.03),
+                              end: Offset.zero,
+                            ).animate(animation),
+                            child: child,
+                          ),
+                        );
+                      },
+                      child: KeyedSubtree(
+                        key: ValueKey('setup-tab-$_setupTab'),
+                        child: _setupPage(data),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
+        ),
+            // Pre-match splash: a bouncing ball while the match loads.
+            if (_startingMatch)
+              Positioned.fill(
+                child: Container(
+                  color: const Color(0xff040906).withValues(alpha: 0.82),
+                  child: const Center(
+                    child: _LoadingBall(
+                      caption: 'Mac hazirlaniyor...',
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -950,7 +1005,6 @@ class _SetupScreenState extends State<SetupScreen> {
             ],
           ),
           const Spacer(),
-        const Spacer(),
         if (_showAdminPasswordField)
           Row(
             mainAxisSize: MainAxisSize.min,
@@ -1021,24 +1075,28 @@ class _SetupScreenState extends State<SetupScreen> {
                 ),
               ),
               const SizedBox(width: 10),
-              FilledButton.icon(
-                onPressed: _startMatch,
-                icon: const Icon(Icons.play_arrow, size: 20),
-                label: const Text('ابدأ المباراة'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xff00c896),
-                  foregroundColor: const Color(0xff00130c),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 26,
-                    vertical: 14,
+              _StartPulse(
+                paused: _startingMatch,
+                child: FilledButton.icon(
+                  onPressed: _startingMatch ? null : _startMatch,
+                  icon: const Icon(Icons.play_arrow, size: 20),
+                  label: const Text('ابدأ المباراة'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xff00c896),
+                    foregroundColor: const Color(0xff00130c),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 26,
+                      vertical: 14,
+                    ),
+                    textStyle: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 15,
+                      letterSpacing: 0.3,
+                    ),
+                    shadowColor:
+                        const Color(0xff00c896).withValues(alpha: 0.5),
+                    elevation: 6,
                   ),
-                  textStyle: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 15,
-                    letterSpacing: 0.3,
-                  ),
-                  shadowColor: const Color(0xff00c896).withValues(alpha: 0.5),
-                  elevation: 6,
                 ),
               ),
             ],
@@ -2453,148 +2511,399 @@ class _SetupScreenState extends State<SetupScreen> {
 
   Widget _adminPage(SavedGameData data) {
     final subTab = _adminSubTab == 2 && !data.adminFullAccess ? 0 : _adminSubTab;
+    const accent = Color(0xff00d084);
+    final activeTeams =
+        data.teams.where((team) => !team.isDeleted).length;
     return Column(
       children: [
+        // ---- Header: identity + live counters + actions ---------------
         Container(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-          decoration: _adminPanelDecoration(const Color(0xff00d084)),
-          child: Row(
+          padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+          decoration: _adminPanelDecoration(accent),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(
-                Icons.admin_panel_settings,
-                color: Color(0xff00d084),
-                size: 30,
-              ),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'YONETIM',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+              Row(
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          accent.withValues(alpha: 0.9),
+                          accent.withValues(alpha: 0.45),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: accent.withValues(alpha: 0.30),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                    Text(
-                      'Hesap sifrelerini degistir, hesap/takim sil.',
-                      style: TextStyle(color: Colors.white60, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              if (data.adminFullAccess)
-                const Chip(
-                  avatar: Icon(Icons.verified, size: 16, color: Color(0xffffd34d)),
-                  label: Text(
-                    'Gelismis erisim (kimo@)',
-                    style: TextStyle(fontSize: 11),
-                  ),
-                ),
-              const SizedBox(width: 10),
-              PopupMenuButton<String>(
-                tooltip: 'Piyasa degerlerini guncelle',
-                onSelected: (value) =>
-                    _updateMarketValues(strong: value == 'strong'),
-                itemBuilder: (context) => const [
-                  PopupMenuItem(
-                    value: 'light',
-                    child: ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.trending_up),
-                      title: Text('Hafif guncelleme'),
-                      subtitle: Text('Son maclara gore kucuk degisimler'),
+                    child: const Icon(
+                      Icons.admin_panel_settings,
+                      color: Colors.white,
+                      size: 28,
                     ),
                   ),
-                  PopupMenuItem(
-                    value: 'strong',
-                    child: ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.trending_up),
-                      title: Text('Guclu guncelleme'),
-                      subtitle: Text('Kariyere gore buyuk degisimler'),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Text(
+                              'YONETIM',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 1.6,
+                              ),
+                            ),
+                            if (data.adminFullAccess) ...[
+                              const SizedBox(width: 10),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xffffd34d)
+                                      .withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: const Color(0xffffd34d)
+                                        .withValues(alpha: 0.55),
+                                  ),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.verified,
+                                      size: 13,
+                                      color: Color(0xffffd34d),
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Gelismis erisim (kimo@)',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w800,
+                                        color: Color(0xfff5d67b),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        const Text(
+                          'Hesap sifrelerini degistir, hesap/takim sil, degerleri yonet.',
+                          style: TextStyle(
+                            color: Colors.white60,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
+                  ),
+                  // ---- Actions ---------------------------------------
+                  PopupMenuButton<String>(
+                    tooltip: 'Piyasa degerlerini guncelle',
+                    onSelected: (value) =>
+                        _updateMarketValues(strong: value == 'strong'),
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: 'light',
+                        child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(Icons.trending_up),
+                          title: Text('Hafif guncelleme'),
+                          subtitle: Text('Son maclara gore kucuk degisimler'),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'strong',
+                        child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(Icons.trending_up),
+                          title: Text('Guclu guncelleme'),
+                          subtitle: Text('Kariyere gore buyuk degisimler'),
+                        ),
+                      ),
+                    ],
+                    child: _adminActionButton(
+                      icon: Icons.attach_money,
+                      label: 'Piyasa Guncelle',
+                      accent: accent,
+                      trailing: Icons.arrow_drop_down,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _AdminIconButton(
+                    icon: Icons.password,
+                    tooltip: 'Yonetici sifresini degistir',
+                    accent: accent,
+                    onPressed: _changeAdminPassword,
+                  ),
+                  const SizedBox(width: 8),
+                  _AdminIconButton(
+                    icon: Icons.lock_outline,
+                    tooltip: 'Yonetim sayfasini kilitle',
+                    accent: Colors.redAccent,
+                    onPressed: _lockAdmin,
                   ),
                 ],
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: const Color(0xff00d084).withValues(alpha: 0.6),
-                    ),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.attach_money, size: 18),
-                      SizedBox(width: 6),
-                      Text(
-                        'Piyasa Guncelle',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      SizedBox(width: 4),
-                      Icon(Icons.arrow_drop_down, size: 18),
-                    ],
-                  ),
-                ),
               ),
-              const SizedBox(width: 10),
-              TextButton.icon(
-                onPressed: _changeAdminPassword,
-                icon: const Icon(Icons.password),
-                label: const Text('Sifre degistir'),
-              ),
-              TextButton.icon(
-                onPressed: _lockAdmin,
-                icon: const Icon(Icons.lock_outline),
-                label: const Text('Kilitle'),
+              const SizedBox(height: 12),
+              // ---- Quick counters ------------------------------------
+              Row(
+                children: [
+                  _adminStatTile(
+                    icon: Icons.account_circle_outlined,
+                    label: 'Hesap',
+                    value: '${data.accounts.length}',
+                    accent: accent,
+                  ),
+                  const SizedBox(width: 10),
+                  _adminStatTile(
+                    icon: Icons.shield_outlined,
+                    label: 'Takim',
+                    value: '$activeTeams',
+                    accent: const Color(0xffffd34d),
+                  ),
+                  const SizedBox(width: 10),
+                  _adminStatTile(
+                    icon: Icons.directions_run_outlined,
+                    label: 'Oyuncu',
+                    value: '${data.players.length}',
+                    accent: const Color(0xff7ab8ff),
+                  ),
+                  const SizedBox(width: 10),
+                  _adminStatTile(
+                    icon: Icons.swap_horiz,
+                    label: 'Bekleyen transfer',
+                    value: '${data.pendingTransfers.length}',
+                    accent: data.pendingTransfers.isEmpty
+                        ? Colors.white38
+                        : const Color(0xffff9f43),
+                  ),
+                ],
               ),
             ],
           ),
         ),
-        const SizedBox(height: 10),
-        SegmentedButton<int>(
-          segments: [
-            const ButtonSegment(
-              value: 0,
-              icon: Icon(Icons.account_circle),
-              label: Text('Hesaplar'),
+        const SizedBox(height: 12),
+        Center(
+          child: SegmentedButton<int>(
+            showSelectedIcon: true,
+            style: SegmentedButton.styleFrom(
+              foregroundColor: Colors.white70,
+              selectedForegroundColor: Colors.white,
+              selectedBackgroundColor: accent.withValues(alpha: 0.22),
+              backgroundColor: Colors.white.withValues(alpha: 0.03),
             ),
-            const ButtonSegment(
-              value: 1,
-              icon: Icon(Icons.groups),
-              label: Text('Takimlar'),
-            ),
-            ButtonSegment(
-              value: 3,
-              icon: const Icon(Icons.swap_horiz),
-              label: Text(
-                'Transferler${data.pendingTransfers.isEmpty ? '' : ' (${data.pendingTransfers.length})'}',
-              ),
-            ),
-            if (data.adminFullAccess)
+            segments: [
               const ButtonSegment(
-                value: 2,
-                icon: Icon(Icons.tune),
-                label: Text('Oyuncu ayarlari'),
+                value: 0,
+                icon: Icon(Icons.account_circle),
+                label: Text('Hesaplar'),
               ),
-          ],
-          selected: {subTab},
-          onSelectionChanged: (selection) =>
-              setState(() => _adminSubTab = selection.first),
+              const ButtonSegment(
+                value: 1,
+                icon: Icon(Icons.groups),
+                label: Text('Takimlar'),
+              ),
+              ButtonSegment(
+                value: 3,
+                icon: const Icon(Icons.swap_horiz),
+                label: Text(
+                  'Transferler${data.pendingTransfers.isEmpty ? '' : ' (${data.pendingTransfers.length})'}',
+                ),
+              ),
+              if (data.adminFullAccess)
+                const ButtonSegment(
+                  value: 2,
+                  icon: Icon(Icons.tune),
+                  label: Text('Oyuncu ayarlari'),
+                ),
+            ],
+            selected: {subTab},
+            onSelectionChanged: (selection) =>
+                setState(() => _adminSubTab = selection.first),
+          ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         Expanded(
-          child: switch (subTab) {
-            1 => _adminTeamsTab(data),
-            2 when data.adminFullAccess => _adminPlayersTab(data),
-            3 => _adminTransfersTab(data),
-            _ => _adminAccountsTab(data),
-          },
+          // Sub-tabs glide in softly instead of snapping.
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 260),
+            switchInCurve: Curves.easeOutCubic,
+            transitionBuilder: (child, animation) {
+              return FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 0.02),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: child,
+                ),
+              );
+            },
+            child: KeyedSubtree(
+              key: ValueKey('admin-subtab-$subTab'),
+              child: switch (subTab) {
+                1 => _adminTeamsTab(data),
+                2 when data.adminFullAccess => _adminPlayersTab(data),
+                3 => _adminTransfersTab(data),
+                _ => _adminAccountsTab(data),
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// A compact pill button for the admin header actions.
+  Widget _adminActionButton({
+    required IconData icon,
+    required String label,
+    required Color accent,
+    IconData? trailing,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: accent.withValues(alpha: 0.45)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 17, color: accent),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 12.5,
+            ),
+          ),
+          if (trailing != null)
+            Icon(trailing, size: 18, color: Colors.white54),
+        ],
+      ),
+    );
+  }
+
+  /// A small counter tile for the admin header statistics strip.
+  Widget _adminStatTile({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color accent,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.10),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: accent),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      height: 1.1,
+                    ),
+                  ),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white54,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Shared header row for the admin sub-tabs: an accent icon chip, a bold
+  /// title and a muted one-line description.
+  Widget _adminSectionHeader({
+    required IconData icon,
+    required Color accent,
+    required String title,
+    required String subtitle,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(color: accent.withValues(alpha: 0.40)),
+          ),
+          child: Icon(icon, size: 18, color: accent),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 11.5,
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -2615,14 +2924,12 @@ class _SetupScreenState extends State<SetupScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Hesaplar',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Sifre unutulduysa buradan yeni sifre belirle. Hesap silinebilir.',
-            style: TextStyle(color: Colors.white60, fontSize: 12),
+          _adminSectionHeader(
+            icon: Icons.account_circle,
+            accent: const Color(0xff00d084),
+            title: 'Hesaplar',
+            subtitle:
+                'Sifre unutulduysa buradan yeni sifre belirle. Hesap silinebilir.',
           ),
           const SizedBox(height: 10),
           TextField(
@@ -2636,54 +2943,167 @@ class _SetupScreenState extends State<SetupScreen> {
           const SizedBox(height: 10),
           const Divider(height: 1),
           Expanded(
-            child: ListView.separated(
-              itemCount: accounts.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final account = accounts[index];
-                final teamCount = data.teams
-                    .where(
-                      (team) =>
-                          team.ownerAccountId == account.id && !team.isDeleted,
-                    )
-                    .length;
-                final active = account.id == data.activeAccountId;
-                final loggedIn = data.isAccountLoggedIn(account.id);
-                return ListTile(
-                  leading: Icon(
-                    loggedIn ? Icons.verified_user : Icons.account_circle,
-                    color: loggedIn ? Colors.greenAccent : Colors.white70,
-                  ),
-                  title: Text(account.username),
-                  subtitle: Text(
-                    'Takim sayisi: $teamCount${active ? ' | aktif duzenleyici' : ''}',
-                  ),
-                  trailing: Wrap(
-                    spacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      OutlinedButton.icon(
-                        onPressed: () => _changeAccountPassword(account),
-                        icon: const Icon(Icons.password, size: 17),
-                        label: const Text('Sifre degistir'),
-                      ),
-                      TextButton.icon(
-                        onPressed: () => _deleteAccount(account),
-                        icon: const Icon(
-                          Icons.delete_outline,
-                          size: 17,
-                          color: Colors.redAccent,
+            child: accounts.isEmpty
+                ? const Center(
+                    child: Text(
+                      'Arama ile eslesen hesap yok',
+                      style: TextStyle(color: Colors.white38),
+                    ),
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    itemCount: accounts.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 6),
+                    itemBuilder: (context, index) {
+                      final account = accounts[index];
+                      final teamCount = data.teams
+                          .where(
+                            (team) =>
+                                team.ownerAccountId == account.id &&
+                                !team.isDeleted,
+                          )
+                          .length;
+                      final active = account.id == data.activeAccountId;
+                      final loggedIn = data.isAccountLoggedIn(account.id);
+                      final initial = account.username.isEmpty
+                          ? '?'
+                          : account.username.characters.first.toUpperCase();
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 9,
                         ),
-                        label: Text(
-                          'Hesabi sil',
-                          style: TextStyle(color: Colors.redAccent.shade200),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.035),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: loggedIn
+                                ? const Color(0xff00d084)
+                                      .withValues(alpha: 0.45)
+                                : Colors.white.withValues(alpha: 0.08),
+                          ),
                         ),
-                      ),
-                    ],
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 19,
+                              backgroundColor: loggedIn
+                                  ? const Color(0xff00d084)
+                                        .withValues(alpha: 0.22)
+                                  : Colors.white.withValues(alpha: 0.08),
+                              child: Text(
+                                initial,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 15,
+                                  color: loggedIn
+                                      ? const Color(0xff7de8bd)
+                                      : Colors.white70,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          account.username,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 13.5,
+                                          ),
+                                        ),
+                                      ),
+                                      if (active) ...[
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white
+                                                .withValues(alpha: 0.08),
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                          child: const Text(
+                                            'aktif',
+                                            style: TextStyle(
+                                              fontSize: 9.5,
+                                              fontWeight: FontWeight.w800,
+                                              color: Colors.white70,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Takim sayisi: $teamCount'
+                                    '${loggedIn ? '  •  oturum acik' : ''}',
+                                    style: const TextStyle(
+                                      color: Colors.white54,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            OutlinedButton.icon(
+                              onPressed: () =>
+                                  _changeAccountPassword(account),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 7,
+                                ),
+                                side: BorderSide(
+                                  color: Colors.white.withValues(alpha: 0.22),
+                                ),
+                              ),
+                              icon: const Icon(Icons.password, size: 15),
+                              label: const Text(
+                                'Sifre',
+                                style: TextStyle(fontSize: 11.5),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            TextButton.icon(
+                              onPressed: () => _deleteAccount(account),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 7,
+                                ),
+                                foregroundColor: Colors.redAccent.shade100,
+                              ),
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                size: 15,
+                                color: Colors.redAccent,
+                              ),
+                              label: Text(
+                                'Sil',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: Colors.redAccent.shade200,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
-                );
-              },
-            ),
           ),
         ],
       ),
@@ -2706,14 +3126,11 @@ class _SetupScreenState extends State<SetupScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Takimlar',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Takim silmeden once uyari gosterilir.',
-            style: TextStyle(color: Colors.white60, fontSize: 12),
+          _adminSectionHeader(
+            icon: Icons.shield_outlined,
+            accent: const Color(0xffffd34d),
+            title: 'Takimlar',
+            subtitle: 'Takim silmeden once uyari gosterilir.',
           ),
           const SizedBox(height: 10),
           TextField(
@@ -2751,14 +3168,12 @@ class _SetupScreenState extends State<SetupScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Transfer Talepleri',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Serbest oyuncular icin gelen transfer isteklerini onayla veya reddet.',
-            style: TextStyle(color: Colors.white60, fontSize: 12),
+          _adminSectionHeader(
+            icon: Icons.swap_horiz,
+            accent: const Color(0xffff9f43),
+            title: 'Transfer Talepleri',
+            subtitle:
+                'Serbest oyuncular icin gelen transfer isteklerini onayla veya reddet.',
           ),
           const SizedBox(height: 10),
           const Divider(height: 1),
@@ -3043,26 +3458,22 @@ class _SetupScreenState extends State<SetupScreen> {
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
             child: Row(
               children: [
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Oyuncu degerleri ve ayarlari',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      Text(
+                Expanded(
+                  child: _adminSectionHeader(
+                    icon: Icons.tune,
+                    accent: const Color(0xff7ab8ff),
+                    title: 'Oyuncu degerleri ve ayarlari',
+                    subtitle:
                         'Gizli bolum — yalnizca kimo@ sifresiyle acilir.',
-                        style: TextStyle(color: Colors.white60, fontSize: 12),
-                      ),
-                    ],
                   ),
                 ),
                 OutlinedButton.icon(
                   onPressed: () => _openTeamPlayers(''),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.22),
+                    ),
+                  ),
                   icon: const Icon(Icons.groups, size: 17),
                   label: const Text('Takim oyunculari sayfasi'),
                 ),
@@ -3503,7 +3914,7 @@ class _SetupScreenState extends State<SetupScreen> {
     await _save();
     if (!mounted) return;
     await Navigator.of(context).push(
-      MaterialPageRoute(
+      fadeSlideRoute(
         builder: (_) => TeamPlayersScreen(
           initialTeamId: teamId.isEmpty ? null : teamId,
           adminFullAccess: data?.adminFullAccess ?? false,
@@ -3516,9 +3927,9 @@ class _SetupScreenState extends State<SetupScreen> {
   Future<void> _openFreeAgents() async {
     await _save();
     if (!mounted) return;
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const FreeAgentsScreen()));
+    await Navigator.of(context).push(
+      fadeSlideRoute(builder: (_) => const FreeAgentsScreen()),
+    );
     _load();
   }
 
@@ -5260,22 +5671,18 @@ class _SetupScreenState extends State<SetupScreen> {
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          accent.withValues(alpha: 0.14),
-          const Color(0xff0e1c17),
+          accent.withValues(alpha: 0.08),
+          const Color(0xff0c1713),
           const Color(0xff08110d),
         ],
       ),
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: accent.withValues(alpha: 0.4), width: 1.2),
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: accent.withValues(alpha: 0.28), width: 1),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withValues(alpha: 0.3),
-          blurRadius: 20,
-          offset: const Offset(0, 8),
-        ),
-        BoxShadow(
-          color: accent.withValues(alpha: 0.06),
-          blurRadius: 30,
+          color: Colors.black.withValues(alpha: 0.25),
+          blurRadius: 18,
+          offset: const Offset(0, 6),
         ),
       ],
     );
@@ -5304,6 +5711,165 @@ class _SetupScreenState extends State<SetupScreen> {
           offset: const Offset(0, 8),
         ),
       ],
+    );
+  }
+}
+
+/// Bouncing football loading splash: the ball hops on a soft shadow in
+/// a loop while the match is being prepared.
+class _LoadingBall extends StatefulWidget {
+  const _LoadingBall({this.caption});
+
+  final String? caption;
+
+  @override
+  State<_LoadingBall> createState() => _LoadingBallState();
+}
+
+class _LoadingBallState extends State<_LoadingBall>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 620),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) {
+            // Ease-in on the way down so the ball "hits" the ground.
+            final t = Curves.easeIn.transform(_controller.value);
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Transform.translate(
+                  offset: Offset(0, -46 * (1 - t)),
+                  child: const Icon(
+                    Icons.sports_soccer,
+                    size: 58,
+                    color: Color(0xfff5d67b),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  width: 46 - 14 * t,
+                  height: 9,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.30 + t * 0.25),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 22),
+        Text(
+          widget.caption ?? 'Yukleniyor...',
+          style: const TextStyle(
+            color: Color(0xfff5d67b),
+            fontWeight: FontWeight.w900,
+            fontSize: 16,
+            letterSpacing: 1.2,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Gentle attention pulse on the start-match button: a soft breathing
+/// scale loop that stops while the match is loading.
+class _StartPulse extends StatefulWidget {
+  const _StartPulse({required this.child, this.paused = false});
+
+  final Widget child;
+  final bool paused;
+
+  @override
+  State<_StartPulse> createState() => _StartPulseState();
+}
+
+class _StartPulseState extends State<_StartPulse>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat(reverse: true);
+
+  @override
+  void didUpdateWidget(covariant _StartPulse oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.paused && _controller.isAnimating) {
+      _controller.stop();
+    } else if (!widget.paused && !_controller.isAnimating) {
+      _controller.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.paused) {
+      return widget.child;
+    }
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Transform.scale(scale: 1 + _controller.value * 0.035, child: child);
+      },
+      child: widget.child,
+    );
+  }
+}
+
+/// Compact icon-only button with a tooltip for the admin header actions.
+class _AdminIconButton extends StatelessWidget {
+  const _AdminIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.accent,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final Color accent;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: accent.withValues(alpha: 0.45)),
+          ),
+          child: Icon(icon, size: 18, color: accent),
+        ),
+      ),
     );
   }
 }

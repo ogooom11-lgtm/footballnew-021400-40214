@@ -9,7 +9,12 @@ import '../game/config/game_constants.dart';
 /// areas, six-yard boxes, penalty spots, penalty arcs, corner arcs) and
 /// goal frames with a simple net.
 class FieldPainter {
-  const FieldPainter();
+  const FieldPainter({this.leftBulge = 0, this.rightBulge = 0});
+
+  /// Goal-net bulge amount (0..1) per side — the net billows outward for
+  /// a moment when a goal is scored into that goal.
+  final double leftBulge;
+  final double rightBulge;
 
   void paint(Canvas canvas) {
     final width = GameConstants.virtualWidth;
@@ -181,6 +186,7 @@ class FieldPainter {
   void _drawGoals(Canvas canvas) {
     final top = GameConstants.virtualHeight / 2 - GameConstants.goalPixelHeight / 2;
     final bottom = GameConstants.virtualHeight / 2 + GameConstants.goalPixelHeight / 2;
+    final midY = GameConstants.virtualHeight / 2;
     final left = GameConstants.leftBound;
     final right = GameConstants.rightBound;
     final depth = GameConstants.goalDepth;
@@ -189,25 +195,59 @@ class FieldPainter {
       ..color = Colors.white
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3.6;
-    final net = Paint()
-      ..color = Colors.white.withValues(alpha: 0.35)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.1;
 
     for (final isLeft in [true, false]) {
       final x = isLeft ? left : right;
       final backX = isLeft ? left - depth : right + depth;
+      // Celebration bulge: the vertical net strands bow outward into the
+      // goal mouth for a moment when the ball hits the net.
+      final bulge = (isLeft ? leftBulge : rightBulge).clamp(0.0, 1.0) *
+          (depth * 0.9);
+      final outward = isLeft ? -1.0 : 1.0;
+      final net = Paint()
+        ..color = Colors.white.withValues(alpha: 0.35 + bulge / depth * 0.35)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.1;
       // Goal frame (posts + crossbar).
       canvas.drawLine(Offset(x, top), Offset(backX, top), post);
       canvas.drawLine(Offset(x, bottom), Offset(backX, bottom), post);
       canvas.drawLine(Offset(backX, top), Offset(backX, bottom), post);
       canvas.drawLine(Offset(x, top), Offset(x, bottom), post);
-      // Simple net grid inside the goal.
+      // Horizontal net strands — when the net bulges they follow the bow.
       for (var y = top + 8; y < bottom - 2; y += 12) {
-        canvas.drawLine(Offset(x, y), Offset(backX, y), net);
+        if (bulge > 0.5) {
+          final bend = math.sin((y - top) / (bottom - top) * math.pi) *
+              bulge * 0.45;
+          canvas.drawPath(
+            Path()
+              ..moveTo(x, y)
+              ..quadraticBezierTo((x + backX) / 2 + outward * bend, y, backX, y),
+            net,
+          );
+        } else {
+          canvas.drawLine(Offset(x, y), Offset(backX, y), net);
+        }
       }
+      // Vertical net strands — each bows outward from its own centre.
       for (var gx = x; (isLeft ? gx > backX : gx < backX);) {
-        canvas.drawLine(Offset(gx, top), Offset(gx, bottom), net);
+        if (bulge > 0.5) {
+          // Strands nearer the goal line bow the most.
+          final strandBend =
+              ((gx - backX).abs() / depth).clamp(0.0, 1.0) * bulge;
+          canvas.drawPath(
+            Path()
+              ..moveTo(gx, top)
+              ..quadraticBezierTo(
+                gx + outward * strandBend,
+                midY,
+                gx,
+                bottom,
+              ),
+            net,
+          );
+        } else {
+          canvas.drawLine(Offset(gx, top), Offset(gx, bottom), net);
+        }
         gx += isLeft ? -8 : 8;
       }
     }

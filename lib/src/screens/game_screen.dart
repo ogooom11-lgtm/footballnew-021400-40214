@@ -85,6 +85,7 @@ class _GameScreenState extends State<GameScreen>
   }
 
   void _onTick(Duration elapsed) {
+    _elapsedSeconds = elapsed.inMicroseconds / Duration.microsecondsPerSecond;
     final last = _lastTick;
     _lastTick = elapsed;
     if (last == null || _exitConfirmationOpen) {
@@ -97,6 +98,58 @@ class _GameScreenState extends State<GameScreen>
     if (mounted) {
       setState(() {});
     }
+  }
+
+  /// Wall-clock seconds since the screen opened — drives cosmetic pulses
+  /// (the breathing ring around the controlled player).
+  double _elapsedSeconds = 0;
+
+  /// Live charge gauge: which player is holding a kick button down and
+  /// how full his power bar is (0..1). Feeds the arc the painter draws
+  /// around him, for open-play kicks AND penalty shots alike.
+  ({PlayerGame? player, double fraction}) _chargeState() {
+    if (_engine.replayMode || _engine.finished) {
+      return (player: null, fraction: 0.0);
+    }
+    final penalty = _engine.activePenalty;
+    if (penalty != null && penalty.result == null) {
+      final started = _actionStarts['penaltyShot'];
+      if (started == null) {
+        return (player: null, fraction: 0.0);
+      }
+      final ms = DateTime.now().difference(started).inMilliseconds;
+      final power = (0.55 + ms / 900).clamp(0.55, 1.65).toDouble();
+      return (
+        player:
+            _engine.teamById(penalty.shootingTeam).playerById(penalty.shooterId),
+        fraction: ((power - 0.55) / (1.65 - 0.55)).clamp(0.0, 1.0).toDouble(),
+      );
+    }
+    for (final entry in _actionStarts.entries) {
+      final teamId = TeamId.values.firstWhere(
+        (team) => entry.key.startsWith(team.name),
+        orElse: () => TeamId.blue,
+      );
+      final kickType = KickType.values.firstWhere(
+        (type) => entry.key.endsWith(type.name),
+        orElse: () => KickType.pass,
+      );
+      if (!_usesPressPower(kickType)) {
+        continue;
+      }
+      final playerId = _actionPlayerIds[entry.key];
+      final ms = DateTime.now().difference(entry.value).inMilliseconds;
+      final maxPower = _maxPowerFor(teamId, kickType, playerId);
+      final power = (0.55 + ms / 820).clamp(0.55, maxPower).toDouble();
+      return (
+        player: _playerById(teamId, playerId) ??
+            _engine.controlledPlayer(teamId),
+        fraction: ((power - 0.55) / (maxPower - 0.55))
+            .clamp(0.0, 1.0)
+            .toDouble(),
+      );
+    }
+    return (player: null, fraction: 0.0);
   }
 
   void _applyMovement(double dt) {
@@ -445,13 +498,7 @@ class _GameScreenState extends State<GameScreen>
     }
     final playerId = _actionPlayerIds.remove(id);
     final ms = DateTime.now().difference(started).inMilliseconds;
-    final maxPower = action.$2 == KickType.highPass
-        ? _engine.restartKind == RestartKind.goalKick
-            ? 2.65
-            : _engine.restartKind == RestartKind.corner
-            ? 2.40
-            : 1.95
-        : 1.55;
+    final maxPower = _maxPowerFor(action.$1, action.$2, playerId);
     final power = (0.55 + ms / 820).clamp(0.55, maxPower).toDouble();
     _engine.manualKick(
       action.$1,
@@ -459,6 +506,27 @@ class _GameScreenState extends State<GameScreen>
       power,
       preferredPlayer: _playerById(action.$1, playerId),
     );
+  }
+
+  /// The real power ceiling of a held kick, mirroring MatchEngine.manualKick
+  /// exactly: shots top out at the SHOOTER's own shot-power rating
+  /// (1.18-1.70), ground passes at 1.45, high balls depend on the restart.
+  double _maxPowerFor(TeamId id, KickType type, String? playerId) {
+    if (type == KickType.highPass) {
+      return _engine.restartKind == RestartKind.goalKick
+          ? 2.65
+          : _engine.restartKind == RestartKind.corner
+          ? 2.40
+          : 1.95;
+    }
+    if (type == KickType.shoot) {
+      final player =
+          _playerById(id, playerId) ?? _engine.controlledPlayer(id);
+      return (1.18 + player.profile.shotPowerRating / 100.0 * 0.52)
+          .clamp(1.18, 1.70)
+          .toDouble();
+    }
+    return 1.45;
   }
 
   void _trackHeldActions() {
@@ -794,6 +862,7 @@ class _GameScreenState extends State<GameScreen>
 
   @override
   Widget build(BuildContext context) {
+    final charge = _chargeState();
     return KeyboardListener(
       focusNode: _focusNode,
       onKeyEvent: _onKey,
@@ -808,6 +877,13 @@ class _GameScreenState extends State<GameScreen>
                     _engine,
                     replayZoom: _engine.replayMode ? _varBallZoom : 1.0,
                     showGoalkeeperDebug: _goalkeeperDebugVisible,
+                    // The widget scoreboard owns the header during live
+                    // play; the canvas header returns for replays and the
+                    // finished screen.
+                    showHeader: _engine.replayMode || _engine.finished,
+                    pulsePhase: _elapsedSeconds,
+                    chargePlayer: charge.player,
+                    chargeFraction: charge.fraction,
                   ),
                 ),
               ),
@@ -1016,9 +1092,6 @@ class _GameScreenState extends State<GameScreen>
   /// Floating top scoreboard: modern live score + minute + kit swatches
   /// (مطلب واجهة لعبة حديثة).
   Widget _topScoreboard() {
-    final minuteLabel = _engine.minute <= 0
-        ? '0\''
-        : "${_engine.minute.floor()}'";
     return Positioned(
       top: 10,
       left: 0,
@@ -1055,33 +1128,33 @@ class _GameScreenState extends State<GameScreen>
                   ),
                 ),
                 const SizedBox(width: 7),
-                Text(
-                  '${_engine.blueTeam.score}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
-                    color: Color(0xffffdf6b),
-                  ),
-                ),
+                _scorePop(_engine.blueTeam.score, const Color(0xffffdf6b)),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Text(
-                    minuteLabel,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white70,
-                      fontSize: 12,
-                    ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _engine.periodTitle,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xffd4af37),
+                          fontSize: 10,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
+                      Text(
+                        _engine.clockText,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                Text(
-                  '${_engine.redTeam.score}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
-                    color: Color(0xff73b9ff),
-                  ),
-                ),
+                _scorePop(_engine.redTeam.score, const Color(0xff73b9ff)),
                 const SizedBox(width: 7),
                 Container(
                   width: 12,
@@ -1096,6 +1169,28 @@ class _GameScreenState extends State<GameScreen>
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  /// A goal makes the score jump: keyed on the value so every new goal
+  /// replays a quick pop-and-settle scale animation.
+  Widget _scorePop(int score, Color color) {
+    return TweenAnimationBuilder<double>(
+      key: ValueKey('score-pop-$score'),
+      tween: Tween(begin: 1.7, end: 1.0),
+      duration: const Duration(milliseconds: 520),
+      curve: Curves.elasticOut,
+      builder: (context, scale, child) {
+        return Transform.scale(scale: scale, child: child);
+      },
+      child: Text(
+        '$score',
+        style: TextStyle(
+          fontWeight: FontWeight.w900,
+          fontSize: 16,
+          color: color,
         ),
       ),
     );
@@ -1350,40 +1445,46 @@ class _GameScreenState extends State<GameScreen>
     return Positioned(
       top: 18,
       right: 22,
-      child: Container(
-        width: _engine.varReviewActive ? 520 : 390,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              const Color(0xff111b22).withValues(alpha: 0.96),
-              accent.withValues(alpha: 0.20),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: accent.withValues(alpha: 0.70)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: 18,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.18),
-                borderRadius: BorderRadius.circular(11),
+      // The banner glides in on appearance and fades out during the last
+      // moment of its pause (the engine's bannerFade drives the exit).
+      child: Opacity(
+        opacity: _engine.bannerFade,
+        child: _BannerEntrance(
+          key: ValueKey('banner-${banner.title}-${banner.kind}'),
+          child: Container(
+            width: _engine.varReviewActive ? 520 : 390,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  const Color(0xff111b22).withValues(alpha: 0.96),
+                  accent.withValues(alpha: 0.20),
+                ],
               ),
-              child: Icon(icon, color: accent),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: accent.withValues(alpha: 0.70)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-            Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: Icon(icon, color: accent),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
@@ -1448,15 +1549,49 @@ class _GameScreenState extends State<GameScreen>
                       ],
                     ),
                     const SizedBox(height: 7),
-                    const Text(
-                      'R veya Enter: onerilen VAR kararini uygula',
-                      style: TextStyle(color: Colors.white60, fontSize: 11),
+                    Row(
+                      children: [
+                        // Live countdown until the review resolves itself.
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: accent.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: accent.withValues(alpha: 0.5),
+                            ),
+                          ),
+                          child: Text(
+                            '${_engine.varCountdown.ceil()} sn',
+                            style: TextStyle(
+                              color: accent,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'R veya Enter: onerilen VAR kararini uygula',
+                            style: TextStyle(
+                              color: Colors.white60,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ],
               ),
             ),
-          ],
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -3201,78 +3336,97 @@ class _GameScreenState extends State<GameScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // ---- Score header ------------------------------------
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 18, vertical: 14),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _engine.blueTeam.name,
-                        textAlign: TextAlign.right,
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xfff4d03f),
+              // ---- Score header (staggered reveal + score count-up) ----
+              _Reveal(
+                delay: Duration.zero,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 18, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _engine.blueTeam.name,
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xfff4d03f),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 14),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 18, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.white24),
-                      ),
-                      child: Text(
-                        '${_engine.blueTeam.score} - ${_engine.redTeam.score}',
-                        style: const TextStyle(
-                          fontSize: 30,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 2,
+                      const SizedBox(width: 14),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 18, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.4),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white24),
+                        ),
+                        child: TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 0, end: 1),
+                          duration: const Duration(milliseconds: 900),
+                          curve: Curves.easeOut,
+                          builder: (context, t, child) {
+                            final blue = (_engine.blueTeam.score * t).round();
+                            final red = (_engine.redTeam.score * t).round();
+                            return Text(
+                              '$blue - $red',
+                              style: const TextStyle(
+                                fontSize: 30,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 2,
+                              ),
+                            );
+                          },
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Text(
-                        _engine.redTeam.name,
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xff7ab8ff),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Text(
+                          _engine.redTeam.name,
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xff7ab8ff),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 10),
               if (_engine.shootout != null)
-                Text(
-                  'الترجيح: الأزرق ${_engine.shootout!.goalsFor(TeamId.blue)} - '
-                  '${_engine.shootout!.goalsFor(TeamId.red)} الأحمر',
-                  style: const TextStyle(fontWeight: FontWeight.w800),
+                _Reveal(
+                  delay: const Duration(milliseconds: 120),
+                  child: Text(
+                    'الترجيح: الأزرق ${_engine.shootout!.goalsFor(TeamId.blue)} - '
+                    '${_engine.shootout!.goalsFor(TeamId.red)} الأحمر',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
                 ),
               const SizedBox(height: 10),
 
               // ---- Events: goals and cards with minutes --------------
-              _summarySectionTitle('أهداف وبطاقات بالدقائق'),
-              if (events.isEmpty)
-                const Text(
-                  'لا أحداث',
-                  style: TextStyle(color: Colors.white38),
-                )
-              else
-                ...events.where((e) => !e.canceled).map((event) {
+              _Reveal(
+                delay: const Duration(milliseconds: 220),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _summarySectionTitle('أهداف وبطاقات بالدقائق'),
+                    if (events.isEmpty)
+                      const Text(
+                        'لا أحداث',
+                        style: TextStyle(color: Colors.white38),
+                      ),
+                    ...events.where((e) => !e.canceled).map((event) {
                   final icon = _timelineEventIcon(event.kind);
                   final color = _timelineEventColor(event.kind);
                   final teamName = event.teamId == null
@@ -3307,13 +3461,21 @@ class _GameScreenState extends State<GameScreen>
                       ],
                     ),
                   );
-                }),
+                    }),
+                  ],
+                ),
+              ),
               const SizedBox(height: 12),
 
               // ---- Cards per player ---------------------------------
-              if (_engine.disciplinaryEvents.isNotEmpty) ...[
-                _summarySectionTitle('مذكرة البطاقات'),
-                ..._engine.disciplinaryEvents.map((event) {
+              if (_engine.disciplinaryEvents.isNotEmpty)
+                _Reveal(
+                  delay: const Duration(milliseconds: 300),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _summarySectionTitle('مذكرة البطاقات'),
+                      ..._engine.disciplinaryEvents.map((event) {
                   final isRed =
                       event.card == 'red' || event.card == 'secondYellow';
                   final label = event.card == 'secondYellow'
@@ -3344,14 +3506,21 @@ class _GameScreenState extends State<GameScreen>
                       ],
                     ),
                   );
-                }),
-                const SizedBox(height: 12),
-              ],
+                      }),
+                      const SizedBox(height: 12),
+                    ],
+                  ),
+                ),
 
               // ---- Quick stats grid ----------------------------------
-              _summarySectionTitle('إحصائيات سريعة'),
-              const SizedBox(height: 6),
-              _statCompareRow(
+              _Reveal(
+                delay: const Duration(milliseconds: 380),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _summarySectionTitle('إحصائيات سريعة'),
+                    const SizedBox(height: 6),
+                    _statCompareRow(
                 'الاستحواذ',
                 '${_possessionFor(TeamId.blue).toStringAsFixed(0)}%',
                 '${_possessionFor(TeamId.red).toStringAsFixed(0)}%',
@@ -3381,27 +3550,33 @@ class _GameScreenState extends State<GameScreen>
                 '${_engine.blueTeam.goalkeeper.matchSaves}',
                 '${_engine.redTeam.goalkeeper.matchSaves}',
               ),
-              _statCompareRow(
-                'التبعيدات',
-                '${_engine.blueTeam.players.fold<int>(0, (sum, p) => sum + p.matchClearances)}',
-                '${_engine.redTeam.players.fold<int>(0, (sum, p) => sum + p.matchClearances)}',
+                    _statCompareRow(
+                      'التبعيدات',
+                      '${_engine.blueTeam.players.fold<int>(0, (sum, p) => sum + p.matchClearances)}',
+                      '${_engine.redTeam.players.fold<int>(0, (sum, p) => sum + p.matchClearances)}',
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 10),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  'رجل المباراة: ${best.profile.name}  '
-                  'أهداف ${best.matchGoals} • تمرير ناجح '
-                  '${best.matchSuccessfulPasses}/${best.matchPasses} • '
-                  'تسديد ${best.matchShotsOnTarget}/${best.matchShots} • '
-                  'إنقاذ ${best.matchSaves}',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
+              _Reveal(
+                delay: const Duration(milliseconds: 480),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    'رجل المباراة: ${best.profile.name}  '
+                    'أهداف ${best.matchGoals} • تمرير ناجح '
+                    '${best.matchSuccessfulPasses}/${best.matchPasses} • '
+                    'تسديد ${best.matchShotsOnTarget}/${best.matchShots} • '
+                    'إنقاذ ${best.matchSaves}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
                 ),
               ),
               const SizedBox(height: 14),
@@ -3696,6 +3871,102 @@ class _GameScreenState extends State<GameScreen>
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Banner entrance animation: every new banner slides down and fades in.
+class _BannerEntrance extends StatefulWidget {
+  const _BannerEntrance({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<_BannerEntrance> createState() => _BannerEntranceState();
+}
+
+class _BannerEntranceState extends State<_BannerEntrance>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 260),
+  )..forward();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final t = Curves.easeOutCubic.transform(_controller.value);
+        return Opacity(
+          opacity: t,
+          child: Transform.translate(
+            offset: Offset(0, -14 * (1 - t)),
+            child: child,
+          ),
+        );
+      },
+      child: widget.child,
+    );
+  }
+}
+
+/// Staggered reveal for the finished-match panel: [child] waits [delay],
+/// then fades in while sliding up into place.
+class _Reveal extends StatefulWidget {
+  const _Reveal({required this.delay, required this.child});
+
+  final Duration delay;
+  final Widget child;
+
+  @override
+  State<_Reveal> createState() => _RevealState();
+}
+
+class _RevealState extends State<_Reveal> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 380),
+    );
+    Future.delayed(widget.delay, () {
+      if (mounted) {
+        _controller.forward();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final t = Curves.easeOutCubic.transform(_controller.value);
+        return Opacity(
+          opacity: t,
+          child: Transform.translate(
+            offset: Offset(0, 16 * (1 - t)),
+            child: child,
+          ),
+        );
+      },
+      child: widget.child,
     );
   }
 }

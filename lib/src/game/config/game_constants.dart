@@ -20,6 +20,12 @@ class GameConstants {
   static const double crossbarMinMeters = 2.43;
   static const double crossbarMaxMeters = 2.45;
 
+  /// Base acceleration of field players in px/s². Movement is momentum
+  /// based: players need a short sprint to reach top speed and brake
+  /// before their target instead of stopping on a dime — the acceleration
+  /// value is what makes runs feel athletic rather than robotic.
+  static const double playerAcceleration = 560.0;
+
   static const double realSecondsPerGameMinute = 5 * 60 / 90;
   static const double gravityMeters = 9.8;
   static const double replayFreezeSeconds = 2.6;

@@ -1084,10 +1084,14 @@ class PlayerAi {
       forwardTargets,
       preferForward: true,
     );
+    // ONE pressure threshold drives both the candidate pool and the
+    // forward preference — they must agree, otherwise the carrier mixes
+    // "I'm under pressure" with "I have time" in the same decision.
+    final pressureThreshold = 42.0 / difficulty.reactionFactor;
     final safeTarget = engine.chooseBestPass(
       player,
-      pressure < (42 * difficulty.reactionFactor) ? backTargets : forwardTargets,
-      preferForward: pressure >= (42 / difficulty.reactionFactor),
+      pressure < pressureThreshold ? backTargets : forwardTargets,
+      preferForward: pressure >= pressureThreshold,
     );
 
     if (_shouldLaunchCounter(player, team, engine, ownThird) && random.nextDouble() < (0.58 + difficulty.anticipationFactor * 0.15)) {

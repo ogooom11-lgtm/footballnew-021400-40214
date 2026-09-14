@@ -27,6 +27,23 @@ class BallPhysics {
     }
     ball.pos = ball.pos + ball.vel * frameScale;
 
+    // Visual rolling: the painted seams rotate with the distance the ball
+    // covers, and fast balls leave a short fading trail.
+    final travel = ball.vel.length * frameScale;
+    if (travel > 0.05) {
+      ball.rollAngle =
+          (ball.rollAngle + travel / GameConstants.ballRadius) %
+              (math.pi * 2 * 1000);
+    }
+    if (ball.vel.length > 3.4) {
+      ball.trail.add(ball.pos.copy());
+      if (ball.trail.length > 9) {
+        ball.trail.removeAt(0);
+      }
+    } else if (ball.trail.isNotEmpty) {
+      ball.trail.removeAt(0);
+    }
+
     final previousHeight = ball.heightMeters;
     ball.heightMeters += ball.verticalVelocity * dt;
     // A dipping free kick dips less when the shot is powerful: strong

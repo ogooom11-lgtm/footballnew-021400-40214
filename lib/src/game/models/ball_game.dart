@@ -29,6 +29,15 @@ class BallGame {
   ShotType? shotType;
   int trajectoryId = 0;
 
+  /// Visual rolling angle of the ball (radians). Advances with the
+  /// distance travelled so the painted seams visibly rotate while the
+  /// ball is moving.
+  double rollAngle = 0;
+
+  /// The last few in-flight positions, used by the renderer to draw a
+  /// short motion trail behind fast balls.
+  final List<Vec2> trail = <Vec2>[];
+
   /// Minimum horizontal speed kept while a lofted ball is still airborne
   /// (0 when the ball is not an in-flight high pass). Prevents the ball
   /// from stopping mid-air and dropping straight down.
@@ -55,6 +64,7 @@ class BallGame {
     spin = 0;
     shotType = null;
     highPassCruiseSpeed = 0;
+    trail.clear();
     final front = player.lastDirection.normalized(
       Vec2(player.teamId == lastTouch?.teamId ? 1 : -1, 0),
     );

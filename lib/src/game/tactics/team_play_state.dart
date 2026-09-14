@@ -35,7 +35,7 @@ extension TeamPlayStateInfo on TeamPlayState {
 
   /// Human-readable key used by debug overlays.
   String get key => switch (this) {
-        TeamPlayState.possession => 'POSSSESSION',
+        TeamPlayState.possession => 'POSSESSION',
         TeamPlayState.attackingTransition => 'ATT-TRANSITION',
         TeamPlayState.organizedDefense => 'ORG-DEFENSE',
         TeamPlayState.defensiveTransition => 'DEF-TRANSITION',
