@@ -72,19 +72,20 @@ class ShotCalculator {
         .toDouble();
     final sigmaPixels = (baseSigma *
             context.goalWidthPixels *
-            (0.82 + (1 - accuracy) * 0.75) /
+            (0.62 + (1 - accuracy) * 0.55) /
             math.sqrt(conditions) *
+            0.62 *
             (closeRangeBoost > 0 ? 0.66 : 1.0))
         .clamp(2.4, context.goalWidthPixels * 0.72)
         .toDouble();
     var lateralError = _gaussian() * sigmaPixels;
-    // From very close range the ball must stay on target: shots beside a
-    //open goal never drift outside the posts
+    // From very close range the ball must stay on target: shots beside an
+    // open goal never drift outside the posts
     // (مطلب: التسديد من جنب المرمى يدخل المرمى خصوصًا إذا كان فاضيًا).
     if (context.distanceMeters <= 13) {
-      lateralError = (lateralError * 0.45).clamp(
-        -context.goalWidthPixels * 0.22,
-        context.goalWidthPixels * 0.22,
+      lateralError = (lateralError * 0.40).clamp(
+        -context.goalWidthPixels * 0.16,
+        context.goalWidthPixels * 0.16,
       ).toDouble();
     }
 

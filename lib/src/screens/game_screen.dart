@@ -2809,6 +2809,16 @@ class _GameScreenState extends State<GameScreen>
                 ],
               ),
               const SizedBox(height: 8),
+              const Text(
+                'OYNATIM',
+                style: TextStyle(
+                  color: Color(0xffb388ff),
+                  fontWeight: FontWeight.w900,
+                  fontSize: 12,
+                  letterSpacing: 1,
+                ),
+              ),
+              const SizedBox(height: 5),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -2836,6 +2846,19 @@ class _GameScreenState extends State<GameScreen>
                     },
                     icon: const Icon(Icons.fast_rewind),
                   ),
+                  // Frame-accurate stepping for precise VAR decisions:
+                  IconButton(
+                    tooltip: '1 kare geri',
+                    style: IconButton.styleFrom(
+                      backgroundColor:
+                          const Color(0xffb388ff).withValues(alpha: 0.16),
+                    ),
+                    onPressed: () {
+                      _engine.seekReplay(-1);
+                      setState(() {});
+                    },
+                    icon: const Icon(Icons.skip_previous, size: 20),
+                  ),
                   FilledButton.icon(
                     onPressed: () {
                       _engine.toggleReplayPlayback();
@@ -2847,6 +2870,18 @@ class _GameScreenState extends State<GameScreen>
                     label: Text(
                       _engine.replayPlaying ? 'Duraklat' : 'Oynat',
                     ),
+                  ),
+                  IconButton(
+                    tooltip: '1 kare ileri',
+                    style: IconButton.styleFrom(
+                      backgroundColor:
+                          const Color(0xffb388ff).withValues(alpha: 0.16),
+                    ),
+                    onPressed: () {
+                      _engine.seekReplay(1);
+                      setState(() {});
+                    },
+                    icon: const Icon(Icons.skip_next, size: 20),
                   ),
                   IconButton(
                     tooltip: '3 saniye ileri',
@@ -2889,6 +2924,54 @@ class _GameScreenState extends State<GameScreen>
                     icon: const Icon(Icons.last_page),
                   ),
                 ],
+              ),
+              // ---- GOL quick strip: one-tap cancel/restore per goal ----
+              if (_engine.reviewGoals.isNotEmpty) ...[
+                const SizedBox(height: 9),
+                Row(
+                  children: [
+                    const Text(
+                      'GOL KARARLARI',
+                      style: TextStyle(
+                        color: Color(0xff2ee59d),
+                        fontWeight: FontWeight.w900,
+                        fontSize: 12,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(width: 9),
+                    const Expanded(
+                      child: Text(
+                        'Her gol icin iptal / geri al; karta tikla, o ana git.',
+                        style: TextStyle(
+                          color: Colors.white38,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (var i = 0;
+                        i < _engine.reviewGoals.length;
+                        i++)
+                      _varGoalChip(i, _engine.reviewGoals[i]),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 10),
+              const Text(
+                'KARAR EKLE',
+                style: TextStyle(
+                  color: Color(0xffffd34d),
+                  fontWeight: FontWeight.w900,
+                  fontSize: 12,
+                  letterSpacing: 1,
+                ),
               ),
               const SizedBox(height: 6),
               Container(
@@ -3199,6 +3282,133 @@ class _GameScreenState extends State<GameScreen>
       ),
       icon: Icon(icon, size: 15),
       label: Text(label, style: const TextStyle(fontSize: 10)),
+    );
+  }
+
+  /// One chip per goal in the GOL quick strip: shows minute/scorer/team,
+  /// jumps to the goal moment on tap, and cancels/restores the goal with
+  /// a dedicated button (مطلب: شريط اهداف سريع في الفار).
+  Widget _varGoalChip(int index, GoalEvent goal) {
+    final isBlue = goal.teamId == TeamId.blue;
+    final teamColor = isBlue ? const Color(0xff8bd3ff) : const Color(0xffff8a9b);
+    final teamName = isBlue ? _engine.blueTeam.name : _engine.redTeam.name;
+    // Find the matching timeline event so tapping the chip jumps there.
+    MatchTimelineEvent? goalEvent;
+    for (final event in _engine.timelineEvents) {
+      if (event.kind == 'goal' &&
+          event.minute == goal.minute &&
+          (goal.scorerPlayerId == null ||
+              event.relatedPlayerId == goal.scorerPlayerId)) {
+        goalEvent = event;
+        break;
+      }
+    }
+    return Container(
+      padding: const EdgeInsets.fromLTRB(9, 6, 6, 6),
+      decoration: BoxDecoration(
+        color: goal.canceled
+            ? Colors.white.withValues(alpha: 0.04)
+            : const Color(0xff2ee59d).withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: goal.canceled
+              ? Colors.white.withValues(alpha: 0.16)
+              : const Color(0xff2ee59d).withValues(alpha: 0.5),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(7),
+            ),
+            child: Text(
+              "${goal.minute}'",
+              style: const TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 11,
+              ),
+            ),
+          ),
+          const SizedBox(width: 7),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.sports_soccer,
+                    size: 13,
+                    color: goal.canceled ? Colors.white38 : teamColor,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    goal.scorerName,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 11.5,
+                      color: goal.canceled ? Colors.white54 : Colors.white,
+                      decoration: goal.canceled
+                          ? TextDecoration.lineThrough
+                          : null,
+                    ),
+                  ),
+                  if (goal.isPenalty) ...[
+                    const SizedBox(width: 4),
+                    const Icon(Icons.gps_fixed, size: 12, color: Color(0xffd980fa)),
+                  ],
+                ],
+              ),
+              Text(
+                teamName,
+                style: TextStyle(color: teamColor, fontSize: 9.5),
+              ),
+            ],
+          ),
+          const SizedBox(width: 7),
+          if (goalEvent != null)
+            IconButton(
+              tooltip: 'Bu gole git',
+              onPressed: () {
+                _engine.seekReplayToEvent(goalEvent!);
+                setState(() => _selectedTimelineEventId = goalEvent!.id);
+              },
+              icon: const Icon(Icons.my_location, size: 17),
+              visualDensity: VisualDensity.compact,
+            ),
+          FilledButton.icon(
+            onPressed: () {
+              _engine.toggleGoalReview(index);
+              setState(() {});
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: goal.canceled
+                  ? const Color(0xff2ee59d)
+                  : Colors.redAccent,
+              foregroundColor: goal.canceled
+                  ? const Color(0xff00130c)
+                  : Colors.white,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 9,
+                vertical: 7,
+              ),
+              visualDensity: VisualDensity.compact,
+            ),
+            icon: Icon(
+              goal.canceled ? Icons.replay : Icons.cancel_outlined,
+              size: 15,
+            ),
+            label: Text(
+              goal.canceled ? 'Geri al' : 'Iptal et',
+              style: const TextStyle(fontSize: 10.5),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

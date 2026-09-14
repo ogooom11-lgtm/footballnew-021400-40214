@@ -72,6 +72,7 @@ class _SetupScreenState extends State<SetupScreen> {
   String _playerSearch = '';
   String _adminPlayerSearch = '';
   String _adminTeamSearch = '';
+  final TextEditingController _adminNewTeamController = TextEditingController();
   final Map<String, String> _lineupSearchByTeam = <String, String>{};
 
   @override
@@ -90,6 +91,7 @@ class _SetupScreenState extends State<SetupScreen> {
     _redNameController.dispose();
     _adminUnlockTimer?.cancel();
     _adminPasswordController.dispose();
+    _adminNewTeamController.dispose();
     _keyboardFocus.dispose();
     super.dispose();
   }
@@ -2512,242 +2514,269 @@ class _SetupScreenState extends State<SetupScreen> {
   Widget _adminPage(SavedGameData data) {
     final subTab = _adminSubTab == 2 && !data.adminFullAccess ? 0 : _adminSubTab;
     const accent = Color(0xff00d084);
-    final activeTeams =
-        data.teams.where((team) => !team.isDeleted).length;
-    return Column(
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // ---- Header: identity + live counters + actions ---------------
+        // ---------------- Sidebar ------------------------------------
         Container(
-          padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+          width: 240,
+          padding: const EdgeInsets.all(14),
           decoration: _adminPanelDecoration(accent),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Row(
                 children: [
                   Container(
-                    width: 52,
-                    height: 52,
+                    width: 44,
+                    height: 44,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                         colors: [
                           accent.withValues(alpha: 0.9),
-                          accent.withValues(alpha: 0.45),
+                          accent.withValues(alpha: 0.42),
                         ],
                       ),
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
-                          color: accent.withValues(alpha: 0.30),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
+                          color: accent.withValues(alpha: 0.28),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
                         ),
                       ],
                     ),
                     child: const Icon(
                       Icons.admin_panel_settings,
                       color: Colors.white,
-                      size: 28,
+                      size: 24,
                     ),
                   ),
-                  const SizedBox(width: 14),
-                  Expanded(
+                  const SizedBox(width: 10),
+                  const Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            const Text(
-                              'YONETIM',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 1.6,
-                              ),
-                            ),
-                            if (data.adminFullAccess) ...[
-                              const SizedBox(width: 10),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xffffd34d)
-                                      .withValues(alpha: 0.14),
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: const Color(0xffffd34d)
-                                        .withValues(alpha: 0.55),
-                                  ),
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.verified,
-                                      size: 13,
-                                      color: Color(0xffffd34d),
-                                    ),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      'Gelismis erisim (kimo@)',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w800,
-                                        color: Color(0xfff5d67b),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        const Text(
-                          'Hesap sifrelerini degistir, hesap/takim sil, degerleri yonet.',
+                        Text(
+                          'YONETIM',
                           style: TextStyle(
-                            color: Colors.white60,
-                            fontSize: 12,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.4,
+                          ),
+                        ),
+                        Text(
+                          'Kontrol merkezi',
+                          style: TextStyle(
+                            color: Colors.white54,
+                            fontSize: 11,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  // ---- Actions ---------------------------------------
-                  PopupMenuButton<String>(
-                    tooltip: 'Piyasa degerlerini guncelle',
-                    onSelected: (value) =>
-                        _updateMarketValues(strong: value == 'strong'),
-                    itemBuilder: (context) => const [
-                      PopupMenuItem(
-                        value: 'light',
-                        child: ListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(Icons.trending_up),
-                          title: Text('Hafif guncelleme'),
-                          subtitle: Text('Son maclara gore kucuk degisimler'),
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'strong',
-                        child: ListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(Icons.trending_up),
-                          title: Text('Guclu guncelleme'),
-                          subtitle: Text('Kariyere gore buyuk degisimler'),
+                ],
+              ),
+              if (data.adminFullAccess) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xffffd34d).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(9),
+                    border: Border.all(
+                      color: const Color(0xffffd34d).withValues(alpha: 0.5),
+                    ),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.verified, size: 13, color: Color(0xffffd34d)),
+                      SizedBox(width: 5),
+                      Expanded(
+                        child: Text(
+                          'Gelismis erisim (kimo@)',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xfff5d67b),
+                          ),
                         ),
                       ),
                     ],
-                    child: _adminActionButton(
-                      icon: Icons.attach_money,
-                      label: 'Piyasa Guncelle',
-                      accent: accent,
-                      trailing: Icons.arrow_drop_down,
-                    ),
                   ),
-                  const SizedBox(width: 8),
-                  _AdminIconButton(
-                    icon: Icons.password,
-                    tooltip: 'Yonetici sifresini degistir',
-                    accent: accent,
-                    onPressed: _changeAdminPassword,
-                  ),
-                  const SizedBox(width: 8),
-                  _AdminIconButton(
-                    icon: Icons.lock_outline,
-                    tooltip: 'Yonetim sayfasini kilitle',
-                    accent: Colors.redAccent,
-                    onPressed: _lockAdmin,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              // ---- Quick counters ------------------------------------
-              Row(
-                children: [
-                  _adminStatTile(
-                    icon: Icons.account_circle_outlined,
-                    label: 'Hesap',
-                    value: '${data.accounts.length}',
-                    accent: accent,
-                  ),
-                  const SizedBox(width: 10),
-                  _adminStatTile(
-                    icon: Icons.shield_outlined,
-                    label: 'Takim',
-                    value: '$activeTeams',
-                    accent: const Color(0xffffd34d),
-                  ),
-                  const SizedBox(width: 10),
-                  _adminStatTile(
-                    icon: Icons.directions_run_outlined,
-                    label: 'Oyuncu',
-                    value: '${data.players.length}',
-                    accent: const Color(0xff7ab8ff),
-                  ),
-                  const SizedBox(width: 10),
-                  _adminStatTile(
-                    icon: Icons.swap_horiz,
-                    label: 'Bekleyen transfer',
-                    value: '${data.pendingTransfers.length}',
-                    accent: data.pendingTransfers.isEmpty
-                        ? Colors.white38
-                        : const Color(0xffff9f43),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        Center(
-          child: SegmentedButton<int>(
-            showSelectedIcon: true,
-            style: SegmentedButton.styleFrom(
-              foregroundColor: Colors.white70,
-              selectedForegroundColor: Colors.white,
-              selectedBackgroundColor: accent.withValues(alpha: 0.22),
-              backgroundColor: Colors.white.withValues(alpha: 0.03),
-            ),
-            segments: [
-              const ButtonSegment(
-                value: 0,
-                icon: Icon(Icons.account_circle),
-                label: Text('Hesaplar'),
-              ),
-              const ButtonSegment(
-                value: 1,
-                icon: Icon(Icons.groups),
-                label: Text('Takimlar'),
-              ),
-              ButtonSegment(
-                value: 3,
-                icon: const Icon(Icons.swap_horiz),
-                label: Text(
-                  'Transferler${data.pendingTransfers.isEmpty ? '' : ' (${data.pendingTransfers.length})'}',
                 ),
+              ],
+              const SizedBox(height: 14),
+              _adminNavItem(
+                icon: Icons.account_circle,
+                label: 'Hesaplar',
+                count: data.accounts.length,
+                selected: subTab == 0,
+                accent: accent,
+                onTap: () => setState(() => _adminSubTab = 0),
+              ),
+              _adminNavItem(
+                icon: Icons.shield_outlined,
+                label: 'Takimlar',
+                count: data.teams.where((t) => !t.isDeleted).length,
+                selected: subTab == 1,
+                accent: accent,
+                onTap: () => setState(() => _adminSubTab = 1),
+              ),
+              _adminNavItem(
+                icon: Icons.swap_horiz,
+                label: 'Transferler',
+                count: data.pendingTransfers.length,
+                badgeHot: data.pendingTransfers.isNotEmpty,
+                selected: subTab == 3,
+                accent: accent,
+                onTap: () => setState(() => _adminSubTab = 3),
               ),
               if (data.adminFullAccess)
-                const ButtonSegment(
-                  value: 2,
-                  icon: Icon(Icons.tune),
-                  label: Text('Oyuncu ayarlari'),
+                _adminNavItem(
+                  icon: Icons.tune,
+                  label: 'Oyuncu ayarlari',
+                  count: data.players.length,
+                  selected: subTab == 2,
+                  accent: accent,
+                  onTap: () => setState(() => _adminSubTab = 2),
                 ),
+              const SizedBox(height: 16),
+              const Padding(
+                padding: EdgeInsets.only(left: 4, bottom: 6),
+                child: Text(
+                  'HIZLI ISLEMLER',
+                  style: TextStyle(
+                    color: Colors.white38,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ),
+              PopupMenuButton<String>(
+                tooltip: 'Piyasa degerlerini guncelle',
+                onSelected: (value) =>
+                    _updateMarketValues(strong: value == 'strong'),
+                itemBuilder: (context) => const [
+                  PopupMenuItem(
+                    value: 'light',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.trending_up),
+                      title: Text('Hafif guncelleme'),
+                      subtitle: Text('Son maclara gore kucuk degisimler'),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'strong',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.trending_up),
+                      title: Text('Guclu guncelleme'),
+                      subtitle: Text('Kariyere gore buyuk degisimler'),
+                    ),
+                  ),
+                ],
+                child: _adminQuickTile(
+                  icon: Icons.attach_money,
+                  label: 'Piyasa degerlerini guncelle',
+                  accent: accent,
+                ),
+              ),
+              _adminQuickTile(
+                icon: Icons.password,
+                label: 'Yonetici sifresini degistir',
+                accent: accent,
+                onTap: _changeAdminPassword,
+              ),
+              _adminQuickTile(
+                icon: Icons.delete_sweep_outlined,
+                label: 'Mac arsivini temizle (${data.matchArchive.length})',
+                accent: const Color(0xffffd34d),
+                onTap: data.matchArchive.isEmpty ? null : _adminClearArchive,
+              ),
+              const Spacer(),
+              // ---- Danger zone --------------------------------------
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.redAccent.withValues(alpha: 0.07),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.redAccent.withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(
+                          Icons.warning_amber_rounded,
+                          size: 15,
+                          color: Colors.redAccent,
+                        ),
+                        SizedBox(width: 6),
+                        Text(
+                          'TEHLIKELI BOLGE',
+                          style: TextStyle(
+                            color: Colors.redAccent,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: _adminResetAllData,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.redAccent.shade100,
+                        side: BorderSide(
+                          color: Colors.redAccent.withValues(alpha: 0.55),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                      icon: const Icon(Icons.restart_alt, size: 16),
+                      label: const Text(
+                        'Her seyi sifirla',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    OutlinedButton.icon(
+                      onPressed: _lockAdmin,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white70,
+                        side: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.22),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                      icon: const Icon(Icons.lock_outline, size: 16),
+                      label: const Text(
+                        'Sayfayi kilitle',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
-            selected: {subTab},
-            onSelectionChanged: (selection) =>
-                setState(() => _adminSubTab = selection.first),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(width: 12),
+        // ---------------- Content ------------------------------------
         Expanded(
-          // Sub-tabs glide in softly instead of snapping.
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 260),
             switchInCurve: Curves.easeOutCubic,
@@ -2778,87 +2807,214 @@ class _SetupScreenState extends State<SetupScreen> {
     );
   }
 
-  /// A compact pill button for the admin header actions.
-  Widget _adminActionButton({
+  /// Sidebar navigation item with an icon, label and a count badge.
+  Widget _adminNavItem({
     required IconData icon,
     required String label,
+    required int count,
+    required bool selected,
     required Color accent,
-    IconData? trailing,
+    required VoidCallback onTap,
+    bool badgeHot = false,
   }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
-      decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: accent.withValues(alpha: 0.45)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 17, color: accent),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: const TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 12.5,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 5),
+      child: Material(
+        color: selected
+            ? accent.withValues(alpha: 0.16)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(11),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(11),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(11),
+              border: Border.all(
+                color: selected
+                    ? accent.withValues(alpha: 0.55)
+                    : Colors.transparent,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 3,
+                  height: 22,
+                  margin: const EdgeInsets.only(right: 9),
+                  decoration: BoxDecoration(
+                    color: selected ? accent : Colors.transparent,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Icon(
+                  icon,
+                  size: 19,
+                  color: selected ? accent : Colors.white60,
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
+                      fontSize: 13,
+                      color: selected ? Colors.white : Colors.white70,
+                    ),
+                  ),
+                ),
+                if (count > 0)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: badgeHot
+                          ? const Color(0xffff9f43).withValues(alpha: 0.85)
+                          : Colors.white.withValues(alpha: 0.09),
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: Text(
+                      '$count',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w900,
+                        color: badgeHot ? Colors.black : Colors.white70,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
-          if (trailing != null)
-            Icon(trailing, size: 18, color: Colors.white54),
-        ],
+        ),
       ),
     );
   }
 
-  /// A small counter tile for the admin header statistics strip.
-  Widget _adminStatTile({
+  /// Compact quick-action row of the admin sidebar. Works both as a plain
+  /// button ([onTap]) and as a PopupMenuButton child (no onTap).
+  Widget _adminQuickTile({
     required IconData icon,
     required String label,
-    required String value,
     required Color accent,
+    VoidCallback? onTap,
   }) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.04),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.10),
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 18, color: accent),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    value,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
-                      height: 1.1,
-                    ),
-                  ),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white54,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+    final content = Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 17, color: accent),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
               ),
             ),
-          ],
+          ),
+          const Icon(Icons.chevron_right, size: 16, color: Colors.white38),
+        ],
+      ),
+    );
+    if (onTap == null) {
+      // PopupMenuButton provides its own ink.
+      return content;
+    }
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: content,
+    );
+  }
+
+  /// Clears the stored match archive (finished-match summaries).
+  Future<void> _adminClearArchive() async {
+    final data = _data;
+    if (data == null || data.matchArchive.isEmpty) return;
+    final ok = await _confirmDialog(
+      'Mac arsivini temizle',
+      '${data.matchArchive.length} kayitli mac sonucu silinecek. Devam edilsin mi?',
+    );
+    if (ok != true || !mounted) return;
+    setState(() => data.matchArchive.clear());
+    await _save();
+    _showMessage('Mac arsivi temizlendi');
+  }
+
+  /// Danger zone: wipes ALL saved data back to factory defaults.
+  Future<void> _adminResetAllData() async {
+    final ok = await _confirmDialog(
+      'HER SEYI SIFIRLA',
+      'Tum hesaplar, takimlar, oyuncular ve ayarlar silinip baslangic '
+      'durumuna donulecek. Bu islem geri alinamaz. Devam edilsin mi?',
+    );
+    if (ok != true || !mounted) return;
+    final sure = await _confirmDialog(
+      'Emin misiniz?',
+      'Son uyari: tum veriler kalici olarak silinecek.',
+    );
+    if (sure != true || !mounted) return;
+    final fresh = SavedGameData.defaults();
+    fresh.adminLoggedIn = true;
+    fresh.adminFullAccess = _data?.adminFullAccess ?? false;
+    setState(() {
+      _data = fresh;
+      // Keep the setup fields in sync with the fresh defaults, otherwise
+      // _save() would write the old team names back into them.
+      _blueNameController.text = fresh.blueTeam.name;
+      _redNameController.text = fresh.redTeam.name;
+      _blueKitIndex = fresh.blueTeam.activeKitIndex;
+      _redKitIndex = fresh.redTeam.activeKitIndex;
+      _adminSubTab = 0;
+      _accountSearch = '';
+      _adminTeamSearch = '';
+    });
+    await _save();
+    _showMessage('Tum veriler sifirlandi');
+  }
+
+  /// Shared yes/no confirmation dialog; returns true on confirm.
+  Future<bool?> _confirmDialog(String title, String message) {
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xff0e1c17),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
         ),
+        title: Text(title, style: const TextStyle(fontSize: 17)),
+        content: Text(
+          message,
+          style: const TextStyle(color: Colors.white70, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Vazgec'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xff00d084),
+              foregroundColor: const Color(0xff00130c),
+            ),
+            child: const Text('Onayla'),
+          ),
+        ],
       ),
     );
   }
@@ -2930,6 +3086,38 @@ class _SetupScreenState extends State<SetupScreen> {
             title: 'Hesaplar',
             subtitle:
                 'Sifre unutulduysa buradan yeni sifre belirle. Hesap silinebilir.',
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${data.accounts.length} hesap  •  '
+                  '${data.loggedInAccountIds.length} oturum acik',
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: () => _adminCreateAccount(data),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xff00d084),
+                  foregroundColor: const Color(0xff00130c),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 9,
+                  ),
+                ),
+                icon: const Icon(Icons.person_add_alt_1, size: 17),
+                label: const Text(
+                  'Yeni hesap',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 10),
           TextField(
@@ -3058,6 +3246,49 @@ class _SetupScreenState extends State<SetupScreen> {
                               ),
                             ),
                             const SizedBox(width: 10),
+                            // Session toggle: admins can force any account
+                            // in or out without knowing its password.
+                            Tooltip(
+                              message: loggedIn
+                                  ? 'Oturumu kapat'
+                                  : 'Oturum ac ve aktif hesap yap',
+                              child: OutlinedButton.icon(
+                                onPressed: () =>
+                                    _adminToggleAccountLogin(data, account),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 7,
+                                  ),
+                                  side: BorderSide(
+                                    color: loggedIn
+                                        ? const Color(0xff00d084)
+                                              .withValues(alpha: 0.5)
+                                        : Colors.white
+                                              .withValues(alpha: 0.22),
+                                  ),
+                                ),
+                                icon: Icon(
+                                  loggedIn
+                                      ? Icons.logout
+                                      : Icons.login,
+                                  size: 15,
+                                  color: loggedIn
+                                      ? const Color(0xff7de8bd)
+                                      : Colors.white70,
+                                ),
+                                label: Text(
+                                  loggedIn ? 'Cikis' : 'Giris',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    color: loggedIn
+                                        ? const Color(0xff7de8bd)
+                                        : Colors.white70,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
                             OutlinedButton.icon(
                               onPressed: () =>
                                   _changeAccountPassword(account),
@@ -3140,6 +3371,57 @@ class _SetupScreenState extends State<SetupScreen> {
               isDense: true,
             ),
             onChanged: (value) => setState(() => _adminTeamSearch = value),
+          ),
+          const SizedBox(height: 10),
+          // Quick team creation straight from the admin page.
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xffffd34d).withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: const Color(0xffffd34d).withValues(alpha: 0.25),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.add_box_outlined,
+                  size: 20,
+                  color: Color(0xffffd34d),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    controller: _adminNewTeamController,
+                    style: const TextStyle(fontSize: 13),
+                    decoration: const InputDecoration(
+                      labelText: 'Yeni takim adi',
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                    ),
+                    onSubmitted: (_) => _adminCreateTeam(data),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  onPressed: () => _adminCreateTeam(data),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xffffd34d),
+                    foregroundColor: const Color(0xff1d1803),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                  ),
+                  icon: const Icon(Icons.add, size: 17),
+                  label: const Text(
+                    'Takim olustur',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 10),
           const Divider(height: 1),
@@ -3863,6 +4145,107 @@ class _SetupScreenState extends State<SetupScreen> {
     _showMessage('${account.username} sifresi degistirildi');
   }
 
+  /// Admin forces an account's session on or off. Logging an account in
+  /// also makes it the active account, mirroring the normal login flow.
+  Future<void> _adminToggleAccountLogin(
+    SavedGameData data,
+    SavedAccountProfile account,
+  ) async {
+    if (data.isAccountLoggedIn(account.id)) {
+      setState(() {
+        data.loggedInAccountIds.remove(account.id);
+        if (data.activeAccountId == account.id) {
+          data.activeAccountId = data.accounts.first.id;
+          data.loggedInAccountIds.add(data.activeAccountId);
+        }
+      });
+      await _save();
+      _showMessage('${account.username} oturumu kapatildi');
+      return;
+    }
+    setState(() {
+      data.loggedInAccountIds.add(account.id);
+      data.activeAccountId = account.id;
+    });
+    await _save();
+    _showMessage('${account.username} oturumu acildi ve aktif yapildi');
+  }
+
+  /// Admin creates a brand new account (plus an empty team for it),
+  /// without needing to restart from the login screen.
+  Future<void> _adminCreateAccount(SavedGameData data) async {
+    final controller = TextEditingController();
+    final username = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xff0e1c17),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+        ),
+        title: const Text('Yeni hesap olustur', style: TextStyle(fontSize: 17)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(fontSize: 13),
+          decoration: const InputDecoration(
+            labelText: 'Kullanici adi',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Vazgec'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(controller.text),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xff00d084),
+              foregroundColor: const Color(0xff00130c),
+            ),
+            child: const Text('Devam'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (username == null || !mounted) return;
+    final name = username.trim();
+    if (name.length < 2) {
+      _showMessage('Kullanici adi en az 2 karakter olmali');
+      return;
+    }
+    if (data.accounts.any((a) => a.username == name)) {
+      _showMessage('Bu kullanici adi zaten var');
+      return;
+    }
+    // Optional password; cancel dialog = skip password.
+    final password = await _askPassword(
+      '$name icin sifre belirle',
+      requireNew: true,
+    );
+    if (!mounted) return;
+    final account = SavedAccountProfile.create(
+      name,
+      password: password ?? '',
+    );
+    final team = SavedTeamProfile.create(
+      ownerAccountId: account.id,
+      name: name,
+      playerIds: const [],
+    );
+    setState(() {
+      data.accounts.add(account);
+      data.teams.add(team);
+    });
+    await _save();
+    _showMessage('$name hesabi olusturuldu (takimi hazir)');
+  }
+
   Future<void> _deleteAccount(SavedAccountProfile account) async {
     final data = _data;
     if (data == null) return;
@@ -4393,25 +4776,83 @@ class _SetupScreenState extends State<SetupScreen> {
           ),
         ),
         const SizedBox(height: 10),
-        Align(
-          alignment: Alignment.centerRight,
-          child: team.isDeleted
-              ? OutlinedButton.icon(
-                  onPressed: () {
-                    setState(() => team.isDeleted = false);
-                    _save();
-                  },
-                  icon: const Icon(Icons.restore),
-                  label: const Text('Takimi geri getir'),
-                )
-              : FilledButton.tonalIcon(
-                  onPressed: () => _deleteTeam(team),
-                  icon: const Icon(Icons.delete_outline),
-                  label: const Text('Takimi sil'),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            // Reset the team's win/draw/loss record and history without
+            // touching the squad.
+            OutlinedButton.icon(
+              onPressed: () => _adminResetTeamRecord(team),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xffffd34d),
+                side: BorderSide(
+                  color: const Color(0xffffd34d).withValues(alpha: 0.45),
                 ),
+              ),
+              icon: const Icon(Icons.scoreboard_outlined, size: 17),
+              label: const Text('Skor sifirla'),
+            ),
+            const SizedBox(width: 8),
+            team.isDeleted
+                ? OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() => team.isDeleted = false);
+                      _save();
+                    },
+                    icon: const Icon(Icons.restore),
+                    label: const Text('Takimi geri getir'),
+                  )
+                : FilledButton.tonalIcon(
+                    onPressed: () => _deleteTeam(team),
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('Takimi sil'),
+                  ),
+          ],
         ),
       ],
     );
+  }
+
+  /// Zeros the team's record (wins/draws/losses/matches) and its recent
+  /// match history. The squad and rating stay untouched.
+  Future<void> _adminResetTeamRecord(SavedTeamProfile team) async {
+    final ok = await _confirmDialog(
+      'Skoru sifirla',
+      '${team.name} takiminden: G${team.wins} B${team.draws} M${team.losses} '
+      'kaydi ve mac gecmisi silinecek. Devam edilsin mi?',
+    );
+    if (ok != true || !mounted) return;
+    setState(() {
+      team.wins = 0;
+      team.draws = 0;
+      team.losses = 0;
+      team.matchHistory.clear();
+    });
+    await _save();
+    _showMessage('${team.name} skoru sifirlandi');
+  }
+
+  /// Quick team creation from the admin page. The new team is owned by the
+  /// currently active account and starts empty (players added later).
+  Future<void> _adminCreateTeam(SavedGameData data) async {
+    final name = _adminNewTeamController.text.trim();
+    if (name.isEmpty) {
+      _showMessage('Takim adi bos olamaz');
+      return;
+    }
+    if (data.teams.any((t) => !t.isDeleted && t.name == name)) {
+      _showMessage('Bu isimde bir takim zaten var');
+      return;
+    }
+    final team = SavedTeamProfile.create(
+      ownerAccountId: data.activeAccountId,
+      name: name,
+      playerIds: const [],
+    );
+    setState(() => data.teams.add(team));
+    _adminNewTeamController.clear();
+    await _save();
+    _showMessage('$name takimi olusturuldu');
   }
 
   Future<void> _deleteTeam(SavedTeamProfile team) async {
@@ -5839,37 +6280,3 @@ class _StartPulseState extends State<_StartPulse>
 }
 
 /// Compact icon-only button with a tooltip for the admin header actions.
-class _AdminIconButton extends StatelessWidget {
-  const _AdminIconButton({
-    required this.icon,
-    required this.tooltip,
-    required this.accent,
-    required this.onPressed,
-  });
-
-  final IconData icon;
-  final String tooltip;
-  final Color accent;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            color: accent.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: accent.withValues(alpha: 0.45)),
-          ),
-          child: Icon(icon, size: 18, color: accent),
-        ),
-      ),
-    );
-  }
-}

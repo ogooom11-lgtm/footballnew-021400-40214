@@ -4725,7 +4725,22 @@ class MatchEngine {
         ? player.pos.y >= centerY
         : keeper.pos.y >= centerY;
     final edge = 9 + (1 - player.profile.composureSkill) * 11;
-    final tacticalY = aimTop ? top + edge : bottom - edge;
+    // Real shooters never hit the exact same spot: the corner target
+    // wanders a little inside the safe zone on every attempt.
+    final placementJitter = (random.nextDouble() - 0.5) * 12;
+    var tacticalY = aimTop
+        ? top + edge + placementJitter
+        : bottom - edge + placementJitter;
+    // If the goalkeeper already covers the chosen corner, drag the aim
+    // back toward the middle instead of shooting straight at his chest
+    // (مطلب: التسديدة ما تروح على الحارس).
+    final keeperGapToCorner =
+        ((keeper.pos.y - tacticalY).abs() / GameConstants.goalPixelHeight)
+            .clamp(0.0, 1.0)
+            .toDouble();
+    final keeperCoversCorner = 1.0 - keeperGapToCorner;
+    tacticalY = tacticalY * (1 - keeperCoversCorner * 0.38) +
+        centerY * (keeperCoversCorner * 0.38);
     final facing = player.lastDirection.normalized(
       Vec2(team.attackDirection.toDouble(), 0),
     );
@@ -4760,9 +4775,15 @@ class MatchEngine {
       final centerBias = (top + bottom) / 2;
       directionalY = directionalY * 0.35 + centerBias * 0.65;
       correction = 0.10;
+    } else if (!openGoal) {
+      // With a keeper in goal the tactical placement dominates: composed
+      // finishers bend most of the aim toward the uncovered corner, so
+      // shots stop clustering on the goalkeeper
+      // (مطلب واقعية التسديد: التسديدة تختار الزاوية).
+      correction = 0.34 + player.profile.composureSkill * 0.26;
     }
-    // Direction supplies the user's target; composure contributes a limited
-    // tactical correction away from the goalkeeper without guaranteeing it.
+    // Direction supplies the user's target; composure contributes the
+    // tactical correction away from the goalkeeper.
     return Vec2(goal.x, directionalY * (1 - correction) + tacticalY * correction);
   }
 
