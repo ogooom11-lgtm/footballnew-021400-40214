@@ -237,6 +237,11 @@ class GoalkeeperAi {
         keeper.goalkeeperPrediction!,
       );
     }
+    // Defensive guard: a dive inherited from a cross/previous action may
+    // lock the keeper while no prediction exists yet (it is cleared every
+    // frame without a shot threat). Never null-deref — compute one now
+    // (fixes crash «Null check operator used on a null value» at this line).
+    keeper.goalkeeperPrediction ??= _predictor.predict(stats, context);
     final prediction = keeper.goalkeeperPrediction!;
     final ready = prediction.timeToImpact < 0.85;
     if (keeper.goalkeeperReactionTimer > 0) {
