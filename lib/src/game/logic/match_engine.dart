@@ -2079,16 +2079,19 @@ class MatchEngine {
         continue;
       }
 
-      // Any opponent touch on a pass (even a deflection) means the pass
-      // was not "clean": it no longer counts as a successful pass.
-      if (ball.potentialAssister != null &&
-          ball.potentialAssister!.teamId != player.teamId) {
-        ball.potentialAssister = null;
-      }
+      // NOTE: a nearby opponent who cannot actually reach the ball does NOT
+      // void the pass — the pass fails only when an opponent genuinely gets
+      // the FIRST touch (مطلب: العبرة بأول لمسة فعلية).
 
       if (_isLogicalHandball(player)) {
         final attackingTeam = ball.lastTouch?.teamId;
         if (attackingTeam != null && attackingTeam != player.teamId) {
+          // A handball IS a real touch: if an opponent handles the pass,
+          // the pass is void before the foul is judged.
+          if (ball.potentialAssister != null &&
+              ball.potentialAssister!.teamId != player.teamId) {
+            ball.potentialAssister = null;
+          }
           final foulSpot = player.pos.copy();
           final contactHeight = ball.heightMeters;
           final attacker = ball.lastTouch;
@@ -2124,6 +2127,16 @@ class MatchEngine {
 
       if (!_canReachBall(player)) {
         continue;
+      }
+
+      // From here on the player genuinely touches the ball. If that first
+      // real touch belongs to an OPPONENT, the pass is void: a pass is
+      // successful only when the FIRST touch after the kick is a team-mate's
+      // — control, heavy touch, header, deflection or instant shot alike
+      // (مطلب: المهم أول لمسة تكون لزميل).
+      if (ball.potentialAssister != null &&
+          ball.potentialAssister!.teamId != player.teamId) {
+        ball.potentialAssister = null;
       }
 
       if (ball.heightMeters > 1.15 && !player.isGoalkeeper) {
@@ -4593,6 +4606,9 @@ class MatchEngine {
     } else {
       redSuccessfulPasses += 1;
     }
+    // One successful pass per ball flight — never double-award the same
+    // delivery (مطلب: تمريرة واحدة تُحسب مرة واحدة).
+    ball.potentialAssister = null;
     // Track assists: if the receiver scores a goal within reasonable time
     // (handled in _scoreGoal), and dribble tracking
     receiver.matchDribbles += 1;
