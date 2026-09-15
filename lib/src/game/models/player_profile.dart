@@ -3,6 +3,11 @@ import 'dart:math' as math;
 import 'goalkeeper.dart';
 import 'shooting.dart';
 
+/// عرض اسم الدولة في الواجهة: القيمة الداخلية «غير محدد» تظهر
+/// بالتركية «Belirsiz» لأن واجهة التطبيق كلها تركية (مطلب).
+String countryLabel(String country) =>
+    country == 'غير محدد' ? 'Belirsiz' : country;
+
 class PlayerMatchRecord {
   const PlayerMatchRecord({
     required this.matchId,

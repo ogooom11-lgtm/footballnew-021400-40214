@@ -141,8 +141,8 @@ class SavedGameData {
     List<TransferRequest>? transferRequests,
   }) : countries = countries ??
             <String>[
-              'قطر', 'السعودية', 'مصر', 'المغرب', 'البرازيل', 'الأرجنتين',
-              'فرنسا', 'إسبانيا', 'إنجلترا', 'ألمانيا', 'تركيا', 'العراق',
+              'Katar', 'Suudi Arabistan', 'Mısır', 'Fas', 'Brezilya', 'Arjantin',
+              'Fransa', 'İspanya', 'İngiltere', 'Almanya', 'Türkiye', 'Irak',
             ],
        matchArchive = matchArchive ?? <FinishedMatchSummary>[],
        transferRequests = transferRequests ?? <TransferRequest>[];

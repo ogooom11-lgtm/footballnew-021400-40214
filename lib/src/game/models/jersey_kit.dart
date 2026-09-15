@@ -173,7 +173,7 @@ class JerseyFactory {
           goalkeeperShirtColor: Color(0xffe040fb),
         ),
         const JerseyKit(
-          name: 'قطر العنابي',
+          name: 'Katar Bordo',
           shirtColor: Color(0xff8a1538),
           shortsColor: Color(0xffffffff),
           socksColor: Color(0xff8a1538),
@@ -181,7 +181,7 @@ class JerseyFactory {
           goalkeeperShirtColor: Color(0xff2ecc71),
         ),
         const JerseyKit(
-          name: 'البرازيل الذهبي',
+          name: 'Brezilya Altın',
           shirtColor: Color(0xffffd700),
           shortsColor: Color(0xff0033a0),
           socksColor: Color(0xffffffff),
@@ -189,7 +189,7 @@ class JerseyFactory {
           goalkeeperShirtColor: Color(0xff1a1a1a),
         ),
         const JerseyKit(
-          name: 'الأرجنتين السماوي',
+          name: 'Arjantin Gök Mavisi',
           shirtColor: Color(0xff75aadb),
           shortsColor: Color(0xff1a1a1a),
           socksColor: Color(0xffffffff),
@@ -197,7 +197,7 @@ class JerseyFactory {
           goalkeeperShirtColor: Color(0xffffa500),
         ),
         const JerseyKit(
-          name: 'ألمانيا الأبيض',
+          name: 'Almanya Beyaz',
           shirtColor: Color(0xffffffff),
           shortsColor: Color(0xff000000),
           socksColor: Color(0xffffffff),
@@ -205,7 +205,7 @@ class JerseyFactory {
           goalkeeperShirtColor: Color(0xff2ecc71),
         ),
         const JerseyKit(
-          name: 'فرنسا الأزرق',
+          name: 'Fransa Mavi',
           shirtColor: Color(0xff21304d),
           shortsColor: Color(0xffffffff),
           socksColor: Color(0xffd80031),
@@ -213,7 +213,7 @@ class JerseyFactory {
           goalkeeperShirtColor: Color(0xffffd700),
         ),
         const JerseyKit(
-          name: 'المغرب الأحمر',
+          name: 'Fas Kırmızı',
           shirtColor: Color(0xffc1272d),
           shortsColor: Color(0xff006233),
           socksColor: Color(0xffc1272d),
@@ -221,7 +221,7 @@ class JerseyFactory {
           goalkeeperShirtColor: Color(0xffdddddd),
         ),
         const JerseyKit(
-          name: 'مصر الفراونة',
+          name: 'Mısır Firavunlar',
           shirtColor: Color(0xffce1126),
           shortsColor: Color(0xffffffff),
           socksColor: Color(0xffce1126),
@@ -229,7 +229,7 @@ class JerseyFactory {
           goalkeeperShirtColor: Color(0xff3498db),
         ),
         const JerseyKit(
-          name: 'برتقالي صارخ',
+          name: 'Parlak Turuncu',
           shirtColor: Color(0xffff7f00),
           shortsColor: Color(0xff1a1a1a),
           socksColor: Color(0xffff7f00),
@@ -237,7 +237,7 @@ class JerseyFactory {
           goalkeeperShirtColor: Color(0xff8e44ad),
         ),
         const JerseyKit(
-          name: 'بنفسجي ملكي',
+          name: 'Kraliyet Moru',
           shirtColor: Color(0xff6a0dad),
           shortsColor: Color(0xff2c003e),
           socksColor: Color(0xff6a0dad),
@@ -245,7 +245,7 @@ class JerseyFactory {
           goalkeeperShirtColor: Color(0xff00c853),
         ),
         const JerseyKit(
-          name: 'وردي الأناقة',
+          name: 'Zarif Pembe',
           shirtColor: Color(0xffff6fa5),
           shortsColor: Color(0xff2c2c2c),
           socksColor: Color(0xffff6fa5),
@@ -253,7 +253,7 @@ class JerseyFactory {
           goalkeeperShirtColor: Color(0xff16a085),
         ),
         const JerseyKit(
-          name: 'سعودي أخضر',
+          name: 'Suudi Yeşil',
           shirtColor: Color(0xff006c35),
           shortsColor: Color(0xffffffff),
           socksColor: Color(0xff006c35),

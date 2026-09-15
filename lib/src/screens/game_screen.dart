@@ -211,13 +211,13 @@ class _GameScreenState extends State<GameScreen>
           size: 36,
         ),
         title: const Text(
-          'هل تريد الخروج من المباراة؟',
+          'Maçtan çıkmak istiyor musunuz?',
           textAlign: TextAlign.center,
         ),
         content: Text(
           _engine.finished
-              ? 'سيتم الرجوع إلى القائمة مع حفظ نتيجة المباراة.'
-              : 'المباراة لم تنتهِ بعد. إذا خرجت الآن فلن تُحفظ نتيجة هذه المباراة.',
+              ? 'Menüye dönülecek ve maç skoru kaydedilecek.'
+              : 'Maç henüz bitmedi. Şimdi çıkarsanız bu maçın skoru kaydedilmeyecek.',
           textAlign: TextAlign.center,
           style: const TextStyle(color: Colors.white70, height: 1.4),
         ),
@@ -226,7 +226,7 @@ class _GameScreenState extends State<GameScreen>
           OutlinedButton.icon(
             onPressed: () => Navigator.of(dialogContext).pop(false),
             icon: const Icon(Icons.sports_soccer),
-            label: const Text('لا، متابعة المباراة'),
+            label: const Text('Hayır, maça devam'),
           ),
           FilledButton.icon(
             style: FilledButton.styleFrom(
@@ -234,7 +234,7 @@ class _GameScreenState extends State<GameScreen>
             ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
             icon: const Icon(Icons.exit_to_app),
-            label: const Text('نعم، خروج'),
+            label: const Text('Evet, çık'),
           ),
         ],
       ),
@@ -1086,7 +1086,7 @@ class _GameScreenState extends State<GameScreen>
           ),
           const SizedBox(height: 2),
           Text(
-            'طاقة ${(avg * 100).round()}%',
+            'Enerji ${(avg * 100).round()}%',
             style: TextStyle(
               fontSize: 9,
               color: color,
@@ -1356,13 +1356,13 @@ class _GameScreenState extends State<GameScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              'ركلة حرة قريبة — هل تريد حائطاً بشرياً؟',
+              'Yakın serbest vuruş — baraj kurmak ister misiniz?',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 8),
             const Text(
-              'اختر حتى خمسة لاعبين. يظهر طول كل لاعب لمساعدتك في الاختيار.',
+              'En fazla beş oyuncu seçin; seçim için her oyuncunun boyu gösterilir.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.white70),
             ),
@@ -1400,7 +1400,7 @@ class _GameScreenState extends State<GameScreen>
                     _engine.declineFreeKickWall();
                     setState(() {});
                   },
-                  child: const Text('لا، بدون حائط'),
+                  child: const Text('Hayır, baraj yok'),
                 ),
                 const SizedBox(width: 12),
                 FilledButton(
@@ -1409,7 +1409,7 @@ class _GameScreenState extends State<GameScreen>
                     _wallPlayerIds.clear();
                     setState(() {});
                   },
-                  child: Text('تأكيد الحائط (${_wallPlayerIds.length})'),
+                  child: Text('Barajı onayla (${_wallPlayerIds.length})'),
                 ),
               ],
             ),
@@ -1796,7 +1796,7 @@ class _GameScreenState extends State<GameScreen>
                               spacing: 4,
                               children: [
                                 ChoiceChip(
-                                  label: const Text('الكل',
+                                  label: const Text('Hepsi',
                                       style: TextStyle(fontSize: 10)),
                                   selected: _subFamilyFilter == null,
                                   onSelected: (_) =>
@@ -1823,7 +1823,7 @@ class _GameScreenState extends State<GameScreen>
                               value: _pickerFormationValue(team),
                               isDense: true,
                               decoration: const InputDecoration(
-                                labelText: 'التشكيل',
+                                labelText: 'Diziliş',
                               ),
                               items: [
                                 for (final formation
@@ -1872,7 +1872,7 @@ class _GameScreenState extends State<GameScreen>
                       // (مطلب: تعيين لاعب أرضي حارساً).
                       FilterChip(
                         label: const Text(
-                          'حارس طوارئ',
+                          'Acil kaleci',
                           style: TextStyle(fontSize: 10),
                         ),
                         selected: _emergencyKeeperMode,
@@ -2202,10 +2202,10 @@ class _GameScreenState extends State<GameScreen>
     setState(() {
       _subHighlightedSlot = slotIndex;
       _subSlotInfo =
-          '${player.profile.name} — مركزه: ${player.role.code} • '
-          'أسرع زميل: ${fastest?.profile.name ?? '-'} '
+          '${player.profile.name} — Pozisyon: ${player.role.code} • '
+          'En hızlı: ${fastest?.profile.name ?? '-'} '
           '(${fastest?.profile.speedRating.toStringAsFixed(0) ?? '-'}) • '
-          'أفضل إنهاء: ${bestFinisher?.profile.name ?? '-'} '
+          'En iyi bitirici: ${bestFinisher?.profile.name ?? '-'} '
           '(${bestFinisher?.profile.finishingRating.toStringAsFixed(0) ?? '-'})';
     });
   }
@@ -2356,9 +2356,9 @@ class _GameScreenState extends State<GameScreen>
       style: const TextStyle(fontSize: 11, color: Colors.white70),
       dropdownColor: const Color(0xff102019),
       items: const [
-        DropdownMenuItem(value: 'rating', child: Text('ترتيب: الأعلى تقييماً')),
-        DropdownMenuItem(value: 'stamina', child: Text('ترتيب: الأعلى طاقة')),
-        DropdownMenuItem(value: 'position', child: Text('ترتيب: المركز')),
+        DropdownMenuItem(value: 'rating', child: Text('Sırala: En yüksek puan')),
+        DropdownMenuItem(value: 'stamina', child: Text('Sırala: En yüksek enerji')),
+        DropdownMenuItem(value: 'position', child: Text('Sırala: Pozisyon')),
       ],
       onChanged: (value) {
         if (value != null) setState(() => _subBenchSort = value);
@@ -2395,7 +2395,7 @@ class _GameScreenState extends State<GameScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'إعادة إدخال من خرجوا سابقاً',
+              'Daha önce çıkanları tekrar oyuna al',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w900,
@@ -2408,8 +2408,8 @@ class _GameScreenState extends State<GameScreen>
                 team,
                 candidates[logIndex],
                 subtitle:
-                    'خرج د${candidates[logIndex].leftMatchMinute?.ceil() ?? '-'}'
-                    '${candidates[logIndex].profile.isUnavailable && !benchEmpty ? ' • متاح فقط بدون بدلاء' : ''}',
+                    'Çıkış: ${candidates[logIndex].leftMatchMinute?.ceil() ?? '-'} dk'
+                    '${candidates[logIndex].profile.isUnavailable && !benchEmpty ? ' • yalnızca yedek yokken' : ''}',
                 enabled: canUseLog &&
                     (benchEmpty ||
                         !candidates[logIndex].profile.isUnavailable),
@@ -2423,7 +2423,7 @@ class _GameScreenState extends State<GameScreen>
               _reentryCard(
                 team,
                 entry.value,
-                subtitle: 'مطرود • عودة طارئة لمركزه',
+                subtitle: 'İhraç • pozisyonuna acil dönüş',
                 enabled: true,
                 onReturn: () {
                   setState(() {
@@ -2452,7 +2452,7 @@ class _GameScreenState extends State<GameScreen>
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(
           content: Text(
-            'تعذر الإعادة: تأكد من تطابق مركز الحارس وعدم نفاد التبديلات',
+            'Geri alınamadı: kaleci pozisyonunu ve kalan değişiklik hakkını kontrol edin',
           ),
         ),
       );
@@ -2491,7 +2491,7 @@ class _GameScreenState extends State<GameScreen>
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 textStyle: const TextStyle(fontSize: 10),
               ),
-              child: const Text('إعادة'),
+              child: const Text('Geri al'),
             ),
           ),
         ],
@@ -3039,7 +3039,7 @@ class _GameScreenState extends State<GameScreen>
                       Padding(
                         padding: const EdgeInsets.only(top: 2),
                         child: Text(
-                          'نافذة الحضور: ${_presenceWindowText(targetPlayer)}',
+                          'Katılım penceresi: ${_presenceWindowText(targetPlayer)}',
                           style: const TextStyle(
                             fontSize: 10,
                             color: Color(0xffb388ff),
@@ -3481,12 +3481,12 @@ class _GameScreenState extends State<GameScreen>
     final entered = player.enteredMatchMinute;
     final left = player.leftMatchMinute;
     if (player.isSentOff) {
-      return "دخول د${entered.ceil()} • خرج د${left?.ceil() ?? '?'} (طرد)";
+      return "Giriş ${entered.ceil()}. dk • Çıkış ${left?.ceil() ?? '?'} dk (ihraç)";
     }
     if (left != null) {
-      return "دخول د${entered.ceil()} • خرج د${left.ceil()} (تبديل)";
+      return "Giriş ${entered.ceil()}. dk • Çıkış ${left.ceil()} dk (değişiklik)";
     }
-    return "على أرضية الملعب منذ د${entered.ceil()}";
+    return "${entered.ceil()}. dakikadan beri sahada";
   }
 
   Color _timelineEventColor(String kind) => switch (kind) {
@@ -3626,8 +3626,8 @@ class _GameScreenState extends State<GameScreen>
                 _Reveal(
                   delay: const Duration(milliseconds: 120),
                   child: Text(
-                    'الترجيح: الأزرق ${_engine.shootout!.goalsFor(TeamId.blue)} - '
-                    '${_engine.shootout!.goalsFor(TeamId.red)} الأحمر',
+                    'Penaltılar: Mavi ${_engine.shootout!.goalsFor(TeamId.blue)} - '
+                    '${_engine.shootout!.goalsFor(TeamId.red)} Kırmızı',
                     style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
                 ),
@@ -3639,10 +3639,10 @@ class _GameScreenState extends State<GameScreen>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _summarySectionTitle('أهداف وبطاقات بالدقائق'),
+                    _summarySectionTitle('Dakikalarıyla goller ve kartlar'),
                     if (events.isEmpty)
                       const Text(
-                        'لا أحداث',
+                        'Olay yok',
                         style: TextStyle(color: Colors.white38),
                       ),
                     ...events.where((e) => !e.canceled).map((event) {
@@ -3693,15 +3693,15 @@ class _GameScreenState extends State<GameScreen>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _summarySectionTitle('مذكرة البطاقات'),
+                      _summarySectionTitle('Kart notları'),
                       ..._engine.disciplinaryEvents.map((event) {
                   final isRed =
                       event.card == 'red' || event.card == 'secondYellow';
                   final label = event.card == 'secondYellow'
-                      ? 'صفراء ثانية = حمراء'
+                      ? 'İkinci sarı = kırmızı'
                       : isRed
-                          ? 'حمراء'
-                          : 'صفراء';
+                          ? 'Kırmızı'
+                          : 'Sarı';
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 1),
                     child: Row(
@@ -3717,7 +3717,7 @@ class _GameScreenState extends State<GameScreen>
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            '${event.playerName} — $label د${event.minute}'
+                            '${event.playerName} — $label ${event.minute}. dk'
                             '${event.suspensionMatches > 0 ? ' • إيقاف ${event.suspensionMatches}م' : ''}',
                             style: const TextStyle(fontSize: 12),
                           ),
@@ -3737,40 +3737,40 @@ class _GameScreenState extends State<GameScreen>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _summarySectionTitle('إحصائيات سريعة'),
+                    _summarySectionTitle('Hızlı istatistikler'),
                     const SizedBox(height: 6),
                     _statCompareRow(
-                'الاستحواذ',
+                'Topa sahip olma',
                 '${_possessionFor(TeamId.blue).toStringAsFixed(0)}%',
                 '${_possessionFor(TeamId.red).toStringAsFixed(0)}%',
               ),
               _statCompareRow(
-                'التمريرات (ناجحة)',
+                'Paslar (isabetli)',
                 '${_engine.blueSuccessfulPasses}/${_engine.bluePasses}',
                 '${_engine.redSuccessfulPasses}/${_engine.redPasses}',
               ),
               _statCompareRow(
-                'التسديدات',
+                'Şutlar',
                 '${_engine.blueShots}',
                 '${_engine.redShots}',
               ),
               _statCompareRow(
-                'الأخطاء',
+                'Faul sayısı',
                 '${_engine.blueTeam.players.fold<int>(0, (sum, p) => sum + p.matchFoulsCommitted)}',
                 '${_engine.redTeam.players.fold<int>(0, (sum, p) => sum + p.matchFoulsCommitted)}',
               ),
               _statCompareRow(
-                'البطاقات',
+                'Kartlar',
                 '${_engine.disciplinaryEvents.where((e) => e.teamId == TeamId.blue).length}',
                 '${_engine.disciplinaryEvents.where((e) => e.teamId == TeamId.red).length}',
               ),
               _statCompareRow(
-                'التصديات',
+                'Kurtarışlar',
                 '${_engine.blueTeam.goalkeeper.matchSaves}',
                 '${_engine.redTeam.goalkeeper.matchSaves}',
               ),
                     _statCompareRow(
-                      'التبعيدات',
+                      'Uzaklaştırmalar',
                       '${_engine.blueTeam.players.fold<int>(0, (sum, p) => sum + p.matchClearances)}',
                       '${_engine.redTeam.players.fold<int>(0, (sum, p) => sum + p.matchClearances)}',
                     ),
@@ -3788,11 +3788,11 @@ class _GameScreenState extends State<GameScreen>
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
-                    'رجل المباراة: ${best.profile.name}  '
-                    'أهداف ${best.matchGoals} • تمرير ناجح '
+                    'Maçın adamı: ${best.profile.name}  '
+                    'Gol ${best.matchGoals} • İsabetli pas '
                     '${best.matchSuccessfulPasses}/${best.matchPasses} • '
-                    'تسديد ${best.matchShotsOnTarget}/${best.matchShots} • '
-                    'إنقاذ ${best.matchSaves}',
+                    'Şut ${best.matchShotsOnTarget}/${best.matchShots} • '
+                    'Kurtarış ${best.matchSaves}',
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
@@ -3807,7 +3807,7 @@ class _GameScreenState extends State<GameScreen>
                   FilledButton.icon(
                     onPressed: _showPlayerStatistics,
                     icon: const Icon(Icons.analytics_outlined),
-                    label: const Text('تفاصيل وإحصائيات جميع اللاعبين'),
+                    label: const Text('Tüm oyuncuların detayları ve istatistikleri'),
                   ),
                   FilledButton.tonalIcon(
                     onPressed: () {
@@ -3819,13 +3819,13 @@ class _GameScreenState extends State<GameScreen>
                       });
                     },
                     icon: const Icon(Icons.video_settings),
-                    label: const Text('فتح مركز تحكم VAR'),
+                    label: const Text('VAR kontrol merkezini aç'),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
               const Text(
-                'Esc: القائمة الرئيسية',
+                'Esc: Ana menü',
                 style: TextStyle(color: Colors.white54, fontSize: 11),
               ),
             ],
@@ -3912,7 +3912,7 @@ class _GameScreenState extends State<GameScreen>
               children: [
                 Icon(Icons.analytics, color: Color(0xffffd34d)),
                 SizedBox(width: 10),
-                Text('إحصائيات اللاعبين الكاملة'),
+                Text('Oyuncu tam istatistikleri'),
               ],
             ),
             content: SizedBox(
@@ -3924,7 +3924,7 @@ class _GameScreenState extends State<GameScreen>
                     controller: searchController,
                     decoration: const InputDecoration(
                       prefixIcon: Icon(Icons.search),
-                      labelText: 'ابحث عن لاعب',
+                      labelText: 'Oyuncu ara',
                       isDense: true,
                     ),
                     onChanged: (value) => setDialogState(
@@ -4034,7 +4034,7 @@ class _GameScreenState extends State<GameScreen>
             actions: [
               FilledButton(
                 onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('إغلاق'),
+                child: const Text('Kapat'),
               ),
             ],
           );

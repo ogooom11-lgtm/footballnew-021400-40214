@@ -326,10 +326,10 @@ enum FormationFamily { defensive, balanced, attacking, midfieldHeavy }
 
 extension FormationFamilyInfo on FormationFamily {
   String get label => switch (this) {
-        FormationFamily.defensive => 'دفاعي',
-        FormationFamily.balanced => 'متوازن',
-        FormationFamily.attacking => 'هجومي',
-        FormationFamily.midfieldHeavy => 'وسط قوي',
+        FormationFamily.defensive => 'Defansif',
+        FormationFamily.balanced => 'Dengeli',
+        FormationFamily.attacking => 'Ofansif',
+        FormationFamily.midfieldHeavy => 'Güçlü orta saha',
       };
 }
 

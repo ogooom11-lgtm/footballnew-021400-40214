@@ -3834,7 +3834,7 @@ class MatchEngine {
       // flipping the flag cancels the decision on the spot.
       timeline.canceled = !timeline.canceled;
       banner = MatchBanner(
-        timeline.canceled ? 'قرار ملغي' : 'قرار اعيد',
+        timeline.canceled ? 'İptal edilen karar' : 'Yenilenen karar',
         "VAR ${timeline.minute}'",
         2.0,
         minute: timeline.minute,
@@ -3996,7 +3996,7 @@ class MatchEngine {
       ball.attachTo(team.players[outIndex]);
     }
     _startPause(
-      '${team.name}: اعادة ادخال',
+      '${team.name}: tekrar oyuna giriş',
       '${team.substitutionsUsed}/${team.substitutionLimit}',
       0.8,
       null,
@@ -4012,7 +4012,7 @@ class MatchEngine {
     if (!ok) {
       return false;
     }
-    _startPause('${team.name}: عودة مطرود', 'طوارئ', 0.8, null);
+    _startPause('${team.name}: ihraç edilen döndü', 'Acil durum', 0.8, null);
     return true;
   }
 
@@ -5224,9 +5224,9 @@ class MatchEngine {
     final stillOn = !player.isSentOff &&
         teamById(player.teamId).players.contains(player);
     if (left == null || stillOn) {
-      return '${player.profile.name}: على الأرض من الدقيقة $entered';
+      return '${player.profile.name}: $entered. dakikadan beri sahada';
     }
-    return '${player.profile.name}: لعب $entered–${left.floor()}';
+    return '${player.profile.name}: $entered–${left.floor()} dk oynadı';
   }
 
   DisciplinaryEvent? _issueCard(

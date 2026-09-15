@@ -27,21 +27,21 @@ class TeamPlayersScreen extends StatefulWidget {
 /// Sort keys of the players page (مطلب الفرز الكامل: القيمة، معدل النقاط،
 /// الأهداف، السرعة، الإنهاء...).
 enum _PlayerSort {
-  name('الاسم'),
-  number('الرقم'),
-  marketValue('القيمة السوقية'),
-  averagePoints('معدل النقاط'),
-  totalPoints('مجموع النقاط'),
-  goals('الأهداف'),
-  assists('الصناعة'),
-  overall('التقييم العام'),
-  speed('السرعة'),
-  finishing('الإنهاء'),
-  shotPower('قوة التسديد'),
-  successfulPasses('التمريرات الناجحة'),
-  matchesPlayed('المباريات'),
-  stamina('التحمل'),
-  zeka('الذكاء');
+  name('İsim'),
+  number('Numara'),
+  marketValue('Piyasa değeri'),
+  averagePoints('Puan ort.'),
+  totalPoints('Toplam puan'),
+  goals('Goller'),
+  assists('Asistler'),
+  overall('Genel puan'),
+  speed('Hız'),
+  finishing('Bitiricilik'),
+  shotPower('Şut gücü'),
+  successfulPasses('İsabetli paslar'),
+  matchesPlayed('Maçlar'),
+  stamina('Dayanıklılık'),
+  zeka('Zeka');
 
   const _PlayerSort(this.label);
 
@@ -214,7 +214,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
             ),
           ),
           IconButton(
-            tooltip: _sortAscending ? 'تصاعدي' : 'تنازلي',
+            tooltip: _sortAscending ? 'Artan' : 'Azalan',
             onPressed: () => setState(() => _sortAscending = !_sortAscending),
             icon: Icon(
               _sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
@@ -239,7 +239,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
     // or M (loss).
     final recent = team.matchHistory.take(5).toList();
     if (recent.isEmpty) {
-      return 'لا توجد مباريات بعد';
+      return 'Henüz maç yok';
     }
     var streakType = '';
     var streak = 0;
@@ -255,32 +255,32 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
       }
     }
     final streakText = switch (streakType) {
-      'G' => streak >= 2 ? ' • $streak فوز متتالي' : '',
-      'M' => streak >= 2 ? ' • $streak خسائر متتالية' : '',
-      'B' => streak >= 2 ? ' • $streak تعادلات متتالية' : '',
+      'G' => streak >= 2 ? ' • $streak maçlık galibiyet serisi' : '',
+      'M' => streak >= 2 ? ' • $streak maçlık mağlubiyet serisi' : '',
+      'B' => streak >= 2 ? ' • $streak maçlık beraberlik serisi' : '',
       _ => '',
     };
     final badges = recent.map((record) {
       final kind = record.result.isEmpty ? '' : record.result[0];
       return switch (kind) {
-        'G' => 'ف',
-        'B' => 'ت',
-        'M' => 'خ',
-        _ => '؟',
+        'G' => 'G',
+        'B' => 'B',
+        'M' => 'M',
+        _ => '?',
       };
     }).join('-');
-    return 'آخر النتائج: $badges$streakText';
+    return 'Son sonuçlar: $badges$streakText';
   }
 
   String _formatBigValue(double value) {
     if (value >= 1e9) {
       final b = value / 1e9;
       return b >= 100
-          ? b.toStringAsFixed(0) + ' مليار'
-          : b.toStringAsFixed(1) + ' مليار';
+          ? b.toStringAsFixed(0) + ' milyar'
+          : b.toStringAsFixed(1) + ' milyar';
     }
     if (value >= 1e6) {
-      return (value / 1e6).toStringAsFixed(0) + ' مليون';
+      return (value / 1e6).toStringAsFixed(0) + ' milyon';
     }
     return value.toStringAsFixed(0);
   }
@@ -317,7 +317,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                 child: DropdownButtonFormField<String>(
                   value: team.id,
                   isDense: true,
-                  decoration: const InputDecoration(labelText: 'اختر الفريق'),
+                  decoration: const InputDecoration(labelText: 'Takım seç'),
                   items: [
                     for (final item in data.activeTeams)
                       DropdownMenuItem(value: item.id, child: Text(item.name)),
@@ -344,13 +344,13 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                     ),
                   ),
                   Text(
-                    'اللاعبون: ${players.length} (حراس $keepers، أرضية $fielders) • '
-                    'ف${team.wins} ت${team.draws} خ${team.losses}',
+                    'Oyuncular: ${players.length} (kaleci $keepers, saha $fielders) • '
+                    'G${team.wins} B${team.draws} M${team.losses}',
                     style: const TextStyle(
                         color: Colors.white60, fontSize: 12),
                   ),
                   Text(
-                    'المالك: ${owner.isEmpty ? 'غير محدد' : owner.first.username}'
+                    'Sahip: ${owner.isEmpty ? 'Belirsiz' : owner.first.username}'
                     '${team.country == 'غير محدد' ? '' : ' • ${team.country}'}',
                     style: const TextStyle(
                         color: Colors.white60, fontSize: 12),
@@ -374,7 +374,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                 child: Column(
                   children: [
                     const Text(
-                      'قيمة الفريق',
+                      'Takım değeri',
                       style: TextStyle(fontSize: 10, color: Colors.white60),
                     ),
                     Text(
@@ -403,7 +403,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                 TextButton(
                   onPressed: () => _showTeamHistory(team),
                   child: const Text(
-                    'عرض كل النتائج',
+                    'Tüm sonuçları göster',
                     style: TextStyle(fontSize: 12),
                   ),
                 ),
@@ -412,7 +412,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                 onPressed: () => _openKitsManager(team),
                 icon: const Icon(Icons.checkroom, size: 15),
                 label: const Text(
-                  'الأطقم',
+                  'Formalar',
                   style: TextStyle(fontSize: 12),
                 ),
               ),
@@ -425,7 +425,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                         : null,
                     isDense: true,
                     decoration: const InputDecoration(
-                      labelText: 'دولة الفريق',
+                      labelText: 'Takım ülkesi',
                       isDense: true,
                     ),
                     items: [
@@ -454,11 +454,11 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xff102019),
-        title: Text('نتائج ${team.name}'),
+        title: Text('${team.name} sonuçları'),
         content: SizedBox(
           width: 460,
           child: team.matchHistory.isEmpty
-              ? const Text('لا توجد مباريات مسجلة')
+              ? const Text('Kayıtlı maç yok')
               : ListView.separated(
                   shrinkWrap: true,
                   itemCount: team.matchHistory.length,
@@ -480,13 +480,13 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                         ),
                       ),
                       title: Text(
-                        '${record.scoreText} ضد ${record.opponentName}',
+                        '${record.scoreText} vs ${record.opponentName}',
                         style: const TextStyle(fontSize: 13),
                       ),
                       subtitle: Text(
-                        'استحواذ ${record.possessionPercent.toStringAsFixed(0)}% • '
-                        'تمرير ${record.successfulPasses}/${record.passes} • '
-                        'تسديد ${record.shots}',
+                        'Topa sahip olma ${record.possessionPercent.toStringAsFixed(0)}% • '
+                        'Pas ${record.successfulPasses}/${record.passes} • '
+                        'Şut ${record.shots}',
                         style: const TextStyle(fontSize: 11),
                       ),
                     );
@@ -496,7 +496,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('إغلاق'),
+            child: const Text('Kapat'),
           ),
         ],
       ),
@@ -712,7 +712,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                       if (player.country != 'غير محدد') ...[
                         const SizedBox(width: 4),
                         Text(
-                          player.country,
+                          countryLabel(player.country),
                           style: const TextStyle(
                             fontSize: 10,
                             color: Colors.white38,
@@ -735,13 +735,13 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      _miniStat('قيمة', player.marketValueText),
-                      _miniStat('أهداف', '${player.goals}'),
-                      _miniStat('صناعة', '${player.assists}'),
-                      _miniStat('معدل النقاط', avgPoints.toStringAsFixed(2)),
-                      _miniStat('سرعة', player.speedRating.toStringAsFixed(0)),
+                      _miniStat('Değer', player.marketValueText),
+                      _miniStat('Gol', '${player.goals}'),
+                      _miniStat('Asist', '${player.assists}'),
+                      _miniStat('Puan ort.', avgPoints.toStringAsFixed(2)),
+                      _miniStat('Hız', player.speedRating.toStringAsFixed(0)),
                       _miniStat(
-                          'إنهاء', player.finishingRating.toStringAsFixed(0)),
+                          'Bitiricilik', player.finishingRating.toStringAsFixed(0)),
                     ],
                   ),
                 ],
@@ -749,22 +749,22 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
             ),
             if (widget.adminFullAccess)
               IconButton(
-                tooltip: 'تعديل القيم والإعدادات',
+                tooltip: 'Değerleri ve ayarları düzenle',
                 onPressed: () => _editPlayerValues(player),
                 icon: const Icon(Icons.tune, color: Color(0xffffd34d)),
               ),
             IconButton(
-              tooltip: 'تعديل الاسم',
+              tooltip: 'İsmi düzenle',
               onPressed: canEdit ? () => _editPlayerName(player) : null,
               icon: const Icon(Icons.edit, size: 20),
             ),
             IconButton(
-              tooltip: 'تعديل الرقم',
+              tooltip: 'Numarayı düzenle',
               onPressed: canEdit ? () => _editPlayerNumber(player) : null,
               icon: const Icon(Icons.tag, size: 20),
             ),
             IconButton(
-              tooltip: 'إخراج من الفريق',
+              tooltip: 'Takımdan çıkar',
               onPressed: canEdit
                   ? () => _removePlayerFromTeam(data, team, player)
                   : null,
@@ -856,7 +856,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                         ),
                         Text(
                           '${team.name} • ${player.country} • '
-                          'مباريات ${player.matchesPlayed} • دقائق '
+                          'Maç ${player.matchesPlayed} • Dakika '
                           '${player.minutesPlayed}',
                           style: const TextStyle(
                             color: Colors.white60,
@@ -874,25 +874,25 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                 runSpacing: 8,
                 children: [
                   _detailChip('OVR', player.effectiveOverall.toStringAsFixed(0)),
-                  _detailChip('القيمة', player.marketValueText),
-                  _detailChip('أهداف', '${player.goals}'),
-                  _detailChip('صناعة', '${player.assists}'),
-                  _detailChip('معدل النقاط', avgPoints.toStringAsFixed(2)),
-                  _detailChip('مجموع النقاط', player.points.toStringAsFixed(1)),
-                  _detailChip('تسديد', '${player.shots}'),
-                  _detailChip('على المرمى', '${player.shotsOnTarget}'),
-                  _detailChip('تمرير ناجح', '${player.successfulPasses}'),
-                  _detailChip('مراوغات', '${player.successfulDribbles}'),
-                  _detailChip('قطع', '${player.tackles}'),
-                  _detailChip('إنقاذ', '${player.saves}'),
-                  _detailChip('بطاقات', 'ص${player.yellowCards} ح${player.redCards}'),
+                  _detailChip('Değer', player.marketValueText),
+                  _detailChip('Gol', '${player.goals}'),
+                  _detailChip('Asist', '${player.assists}'),
+                  _detailChip('Puan ort.', avgPoints.toStringAsFixed(2)),
+                  _detailChip('Toplam puan', player.points.toStringAsFixed(1)),
+                  _detailChip('Şut', '${player.shots}'),
+                  _detailChip('İsabet', '${player.shotsOnTarget}'),
+                  _detailChip('İsabetli pas', '${player.successfulPasses}'),
+                  _detailChip('Çalımlar', '${player.successfulDribbles}'),
+                  _detailChip('Top kapma', '${player.tackles}'),
+                  _detailChip('Kurtarış', '${player.saves}'),
+                  _detailChip('Kartlar', 'S${player.yellowCards} K${player.redCards}'),
                 ],
               ),
               const SizedBox(height: 14),
               if (widget.adminFullAccess) ...[
                 Row(
                   children: [
-                    const Text('الجنسية:',
+                    const Text('Ülke:',
                         style: TextStyle(color: Colors.white70)),
                     const SizedBox(width: 8),
                     Expanded(
@@ -922,7 +922,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                     TextButton.icon(
                       onPressed: () => _addCountryDialog(),
                       icon: const Icon(Icons.add, size: 16),
-                      label: const Text('دولة جديدة'),
+                      label: const Text('Yeni ülke'),
                     ),
                   ],
                 ),
@@ -934,21 +934,21 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                     icon: const Icon(Icons.back_hand, size: 16),
                     label: Text(
                       player.isGoalkeeper
-                          ? 'تحويله لاعب أرضية'
-                          : 'تعيينه حارساً للمرمى',
+                          ? 'Saha oyuncusu yap'
+                          : 'Kaleci yap',
                     ),
                   ),
                 ),
                 const Divider(height: 22),
               ],
               const Text(
-                'سجل المباريات — نقطة بنقطة',
+                'Maç geçmişi — maç maç',
                 style: TextStyle(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 6),
               if (player.matchHistory.isEmpty)
                 const Text(
-                  'لم يلعب مباريات بعد.',
+                  'Henüz maç oynamadı.',
                   style: TextStyle(color: Colors.white38),
                 )
               else
@@ -996,18 +996,18 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                '${record.scoreText} ضد ${record.opponentName} • '
-                                '${record.minutes} دقيقة'
+                                '${record.scoreText} vs ${record.opponentName} • '
+                                '${record.minutes} dakika'
                                 '${standout ? '  ⭐ مباراة مميزة' : ''}',
                                 style: const TextStyle(
                                     fontWeight: FontWeight.w700,
                                     fontSize: 12),
                               ),
                               Text(
-                                'أهداف ${record.goals} • صناعة ${record.assists} • '
-                                'تمرير ${record.successfulPasses}/${record.passes} • '
-                                'تسديد ${record.shotsOnTarget}/${record.shots} • '
-                                'قطع ${record.tackles} • إنقاذ ${record.saves}'
+                                'Gol ${record.goals} • Asist ${record.assists} • '
+                                'Pas ${record.successfulPasses}/${record.passes} • '
+                                'Şut ${record.shotsOnTarget}/${record.shots} • '
+                                'Top kapma ${record.tackles} • Kurtarış ${record.saves}'
                                 '${record.yellowCards > 0 ? ' • صفراء ${record.yellowCards}' : ''}'
                                 '${record.redCards > 0 ? ' • حمراء ${record.redCards}' : ''}'
                                 '${record.injured ? ' • مصاب' : ''}',
@@ -1063,21 +1063,21 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xff102019),
-        title: const Text('إضافة دولة'),
+        title: const Text('Ülke ekle'),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(labelText: 'اسم الدولة'),
+          decoration: const InputDecoration(labelText: 'Ülke adı'),
           onSubmitted: (value) => Navigator.of(context).pop(value),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('إلغاء'),
+            child: const Text('Vazgeç'),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('إضافة'),
+            child: const Text('Ekle'),
           ),
         ],
       ),
@@ -1098,7 +1098,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
     PlayerProfile player,
   ) async {
     if (!widget.adminFullAccess) {
-      _showMessage('تعيين الحارس متاح للإدارة فقط');
+      _showMessage('Kaleci atama yalnızca yönetim içindir');
       return;
     }
     setState(() {
@@ -1116,7 +1116,7 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
     await _save();
     if (mounted) {
       Navigator.of(context).pop();
-      _showMessage('تم تحديث مركز الحارس');
+      _showMessage('Kaleci pozisyonu güncellendi');
     }
   }
 
@@ -1500,7 +1500,7 @@ class _KitsManagerDialogState extends State<_KitsManagerDialog> {
     final kits = team.jerseyKits;
     return AlertDialog(
       backgroundColor: const Color(0xff0c1a14),
-      title: Text('أطقم ${team.name}'),
+      title: Text('${team.name} formaları'),
       content: SizedBox(
         width: 520,
         child: Column(
@@ -1522,7 +1522,7 @@ class _KitsManagerDialogState extends State<_KitsManagerDialog> {
             FilledButton.tonalIcon(
               onPressed: _createCustomKit,
               icon: const Icon(Icons.palette),
-              label: const Text('إنشاء طقم مخصص'),
+              label: const Text('Özel forma oluştur'),
             ),
           ],
         ),
@@ -1530,7 +1530,7 @@ class _KitsManagerDialogState extends State<_KitsManagerDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('إغلاق'),
+          child: const Text('Kapat'),
         ),
       ],
     );
@@ -1604,13 +1604,13 @@ class _KitsManagerDialogState extends State<_KitsManagerDialog> {
     var socks = const Color(0xff21304d);
     var number = const Color(0xffffffff);
     var keeper = const Color(0xff2ecc71);
-    final nameController = TextEditingController(text: 'طقم مخصص');
+    final nameController = TextEditingController(text: 'Özel forma');
     final saved = await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           backgroundColor: const Color(0xff102019),
-          title: const Text('طقم مخصص'),
+          title: const Text('Özel forma'),
           content: SizedBox(
             width: 480,
             child: SingleChildScrollView(
@@ -1619,17 +1619,17 @@ class _KitsManagerDialogState extends State<_KitsManagerDialog> {
                 children: [
                   TextField(
                     controller: nameController,
-                    decoration: const InputDecoration(labelText: 'اسم الطقم'),
+                    decoration: const InputDecoration(labelText: 'Forma adı'),
                   ),
                   const SizedBox(height: 10),
-                  _colorRow('القميص', shirt, (c) => shirt = c,
+                  _colorRow('Forma', shirt, (c) => shirt = c,
                       setDialogState),
-                  _colorRow('الشورت', shorts, (c) => shorts = c,
+                  _colorRow('Şort', shorts, (c) => shorts = c,
                       setDialogState),
-                  _colorRow('الشراب', socks, (c) => socks = c, setDialogState),
-                  _colorRow('الرقم', number, (c) => number = c,
+                  _colorRow('Çorap', socks, (c) => socks = c, setDialogState),
+                  _colorRow('Numara', number, (c) => number = c,
                       setDialogState),
-                  _colorRow('قميص الحارس', keeper, (c) => keeper = c,
+                  _colorRow('Kaleci forması', keeper, (c) => keeper = c,
                       setDialogState),
                 ],
               ),
@@ -1638,11 +1638,11 @@ class _KitsManagerDialogState extends State<_KitsManagerDialog> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('إلغاء'),
+              child: const Text('Vazgeç'),
             ),
             FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('حفظ الطقم'),
+              child: const Text('Formayı kaydet'),
             ),
           ],
         ),
@@ -1654,7 +1654,7 @@ class _KitsManagerDialogState extends State<_KitsManagerDialog> {
         ...widget.team.jerseyKits,
         JerseyKit(
           name: nameController.text.trim().isEmpty
-              ? 'طقم مخصص'
+              ? 'Özel forma'
               : nameController.text.trim(),
           shirtColor: shirt,
           shortsColor: shorts,
