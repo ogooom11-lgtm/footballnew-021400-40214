@@ -177,6 +177,7 @@ class PlayerProfile {
     this.injuryExpectedReturnAt = 0,
     this.injuryDailyRecovery = 4,
     this.country = 'غير محدد',
+    this.marketValueDelta = 0,
     List<PlayerMatchRecord>? matchHistory,
   }) : matchHistory = matchHistory ?? <PlayerMatchRecord>[];
 
@@ -186,6 +187,18 @@ class PlayerProfile {
   /// The player's national country (مطلب الدول). Managed and assigned from
   /// the admin section; shown on the player pages.
   String country;
+
+  /// آخر تغيّر في القيمة التسويقية (رقم موقّع: موجب ارتفاع، سالب نزول)
+  /// — يُعرض لكل لاعب في صفحة اللاعبين (مطلب: يظهر أديش ارتفع أو نزل).
+  double marketValueDelta;
+
+  /// يضبط قيمة سوقية جديدة ويسجّل مقدار التغيّر عنها.
+  void applyMarketValue(double newValue) {
+    final clamped =
+        newValue.clamp(minMarketValue, maxMarketValue).toDouble();
+    marketValueDelta = clamped - marketValue;
+    marketValue = clamped;
+  }
   final double heightMeters;
   final bool isGoalkeeper;
   int? number;
@@ -345,15 +358,12 @@ class PlayerProfile {
     }
     // A gentle market-value response to form (±2% at the extremes). The
     // ceiling follows the profile model's maximum — no separate 5-billion
-    // cap, so admin-set high values are not dragged back down.
+    // cap, so admin-set high values are not dragged back down. The change
+    // is recorded so the players page can show who rose and who dropped.
     if (rating >= 7.8) {
-      marketValue =
-          (marketValue * 1.02).clamp(minMarketValue, maxMarketValue)
-              .toDouble();
+      applyMarketValue(marketValue * 1.02);
     } else if (rating < 5.8) {
-      marketValue =
-          (marketValue * 0.985).clamp(minMarketValue, maxMarketValue)
-              .toDouble();
+      applyMarketValue(marketValue * 0.985);
     }
   }
 
@@ -447,6 +457,7 @@ class PlayerProfile {
   /// Players who have never played stay at exactly 1 billion.
   void recalculateMarketValue({required bool strong}) {
     if (matchesPlayed <= 0) {
+      marketValueDelta = baseMarketValue - marketValue;
       marketValue = baseMarketValue;
       return;
     }
@@ -476,7 +487,9 @@ class PlayerProfile {
         formFactor *
         perfFactor *
         careerFactor;
-    marketValue = value.clamp(minMarketValue, maxMarketValue).toDouble();
+    final clamped = value.clamp(minMarketValue, maxMarketValue).toDouble();
+    marketValueDelta = clamped - marketValue;
+    marketValue = clamped;
   }
 
   /// Compact market value text: "1.00 Mr" (milyar), "850 Mn" (milyon),
@@ -779,6 +792,8 @@ class PlayerProfile {
       fitness: (json['fitness'] as num?)?.toDouble() ?? 1.0,
       fitnessUpdatedAt: (json['fitnessUpdatedAt'] as num?)?.toInt() ?? 0,
       marketValue: (json['marketValue'] as num?)?.toDouble() ?? 1000000000,
+      marketValueDelta:
+          (json['marketValueDelta'] as num?)?.toDouble() ?? 0,
       country: json['country'] as String? ?? 'غير محدد',
       injuryUpdatedAt: (json['injuryUpdatedAt'] as num?)?.toInt() ?? 0,
       injuryStartedAt: (json['injuryStartedAt'] as num?)?.toInt() ?? 0,
@@ -878,6 +893,7 @@ class PlayerProfile {
         'fitness': double.parse(fitness.toStringAsFixed(3)),
         'fitnessUpdatedAt': fitnessUpdatedAt,
         'marketValue': marketValue.round(),
+        'marketValueDelta': marketValueDelta.round(),
         'injuryUpdatedAt': injuryUpdatedAt,
         'injuryStartedAt': injuryStartedAt,
         'injuryExpectedReturnAt': injuryExpectedReturnAt,

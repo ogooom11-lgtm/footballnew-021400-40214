@@ -60,7 +60,7 @@ class _SetupScreenState extends State<SetupScreen> {
   /// True while the match is being prepared: shows the bouncing-ball
   /// loading splash instead of jumping straight into the game.
   bool _startingMatch = false;
-  int _pendingAdminTab = 5;
+  int _pendingAdminTab = 6;
   int _adminSubTab = 0;
   String? _adminValueTeamId;
   String? _adminBulkAttribute;
@@ -74,6 +74,8 @@ class _SetupScreenState extends State<SetupScreen> {
   String _adminPlayerSearch = '';
   String _adminTeamSearch = '';
   String _countrySearch = '';
+  String _countryPageSearch = '';
+  String _countriesSort = 'value';
   final TextEditingController _adminNewTeamController = TextEditingController();
   final Map<String, String> _lineupSearchByTeam = <String, String>{};
 
@@ -295,7 +297,7 @@ class _SetupScreenState extends State<SetupScreen> {
         _pressedKeys.contains(LogicalKeyboardKey.keyC);
   }
 
-  Future<void> _openAdminLogin({int targetTab = 5}) async {
+  Future<void> _openAdminLogin({int targetTab = 6}) async {
     setState(() {
       _pendingAdminTab = targetTab;
       _showAdminPasswordField = true;
@@ -926,11 +928,16 @@ class _SetupScreenState extends State<SetupScreen> {
       ),
       ButtonSegment(
         value: 5,
+        icon: Icon(Icons.public),
+        label: Text('Ülkeler'),
+      ),
+      ButtonSegment(
+        value: 6,
         icon: Icon(Icons.admin_panel_settings),
         label: Text('Yonetim'),
       ),
       ButtonSegment(
-        value: 6,
+        value: 7,
         icon: Icon(Icons.gavel),
         label: Text('CEZALAR'),
       ),
@@ -945,7 +952,7 @@ class _SetupScreenState extends State<SetupScreen> {
         final target = selection.first;
         // CEZALAR and Yonetim pages stay visible but always ask for the
         // admin password when the admin is not logged in.
-        if ((target == 5 || target == 6) && data?.adminLoggedIn != true) {
+        if ((target == 6 || target == 7) && data?.adminLoggedIn != true) {
           _openAdminLogin(targetTab: target);
           return;
         }
@@ -967,8 +974,9 @@ class _SetupScreenState extends State<SetupScreen> {
       ),
       2 => _teamsPage(data),
       3 => _playerPool(data),
-      5 => data.adminLoggedIn ? _adminPage(data) : _lockedAdminPage(),
-      6 => data.adminLoggedIn ? _penaltiesPage(data) : _lockedPenaltiesPage(),
+      5 => _countriesPage(data),
+      6 => data.adminLoggedIn ? _adminPage(data) : _lockedAdminPage(),
+      7 => data.adminLoggedIn ? _penaltiesPage(data) : _lockedPenaltiesPage(),
       _ => _helpPage(),
     };
   }
@@ -1815,6 +1823,676 @@ class _SetupScreenState extends State<SetupScreen> {
     );
   }
 
+  // =====================================================================
+  // صفحة «الدول» العامة (مطلب جديد): بعد صفحة Açıklama مباشرة — كل دولة
+  // مع فرقها ولاعبيها بتصميم بطاقات جذاب، مع بحث وترتيب وإحصائيات.
+  // =====================================================================
+
+  /// لون مميز لكل دولة مشتق من اسمها (ثابت لنفس الاسم دائماً).
+  Color _countryColor(String country) {
+    var hash = 0;
+    for (final unit in country.codeUnits) {
+      hash = (hash * 31 + unit) & 0x7fffffff;
+    }
+    final hue = (hash % 360).toDouble();
+    return HSVColor.fromAHSV(1, hue, 0.62, 0.82).toColor();
+  }
+
+  Widget _countriesPage(SavedGameData data) {
+    final playersByCountry = <String, List<PlayerProfile>>{};
+    final teamsByCountry = <String, List<SavedTeamProfile>>{};
+    for (final player in data.players) {
+      playersByCountry.putIfAbsent(player.country, () => []).add(player);
+    }
+    for (final team in data.teams) {
+      if (team.isDeleted) continue;
+      teamsByCountry.putIfAbsent(team.country, () => []).add(team);
+    }
+    double countryValue(String country) =>
+        (playersByCountry[country] ?? const <PlayerProfile>[])
+            .fold<double>(0, (sum, player) => sum + player.marketValue);
+    final countries = <String>{
+      ...playersByCountry.keys,
+      ...teamsByCountry.keys,
+    }.toList()
+      ..sort((a, b) {
+        if (a == 'غير محدد') return 1;
+        if (b == 'غير محدد') return -1;
+        return switch (_countriesSort) {
+          'players' => (playersByCountry[b]?.length ?? 0)
+              .compareTo(playersByCountry[a]?.length ?? 0),
+          'name' => a.compareTo(b),
+          _ => countryValue(b).compareTo(countryValue(a)),
+        };
+      });
+    final query = _countryPageSearch.trim().toLowerCase();
+    final visible = countries
+        .where(
+          (country) =>
+              query.isEmpty || country.toLowerCase().contains(query),
+        )
+        .toList();
+    final totalValue = data.players
+        .fold<double>(0, (sum, player) => sum + player.marketValue);
+    return Container(
+      decoration: _panelDecoration(),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ---------- Tittle banner ----------
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xff123a52),
+                  Color(0xff0d2438),
+                  Color(0xff0f2f2c),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: const Color(0xff4dd0e1).withValues(alpha: 0.35),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      colors: [Color(0xff4dd0e1), Color(0xff00d084)],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xff4dd0e1)
+                            .withValues(alpha: 0.35),
+                        blurRadius: 14,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.public,
+                    color: Color(0xff06130d),
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Ülkeler — الدول',
+                        style: TextStyle(
+                          fontSize: 19,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'كل دولة مع فرقها ولاعبيها — حتى لو لعبوا في فرق مختلفة',
+                        style: TextStyle(fontSize: 11.5, color: Colors.white60),
+                      ),
+                    ],
+                  ),
+                ),
+                _countryBannerStat(
+                  icon: Icons.public,
+                  value: '${countries.length}',
+                  label: 'دولة',
+                ),
+                const SizedBox(width: 10),
+                _countryBannerStat(
+                  icon: Icons.directions_run,
+                  value: '${data.players.length}',
+                  label: 'لاعب',
+                ),
+                const SizedBox(width: 10),
+                _countryBannerStat(
+                  icon: Icons.shield_outlined,
+                  value: '${data.teams.where((t) => !t.isDeleted).length}',
+                  label: 'فريق',
+                ),
+                const SizedBox(width: 10),
+                _countryBannerStat(
+                  icon: Icons.account_balance,
+                  value: _compactMoney(totalValue),
+                  label: 'قيمة إجمالية',
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          // ---------- Search + sort ----------
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  onChanged: (value) =>
+                      setState(() => _countryPageSearch = value),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    prefixIcon: Icon(Icons.search, size: 18),
+                    hintText: 'ابحث عن دولة...',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 190,
+                child: DropdownButtonFormField<String>(
+                  value: _countriesSort,
+                  isDense: true,
+                  decoration: const InputDecoration(
+                    labelText: 'الترتيب حسب',
+                    isDense: true,
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'value',
+                      child: Text('القيمة الإجمالية', style: TextStyle(fontSize: 12)),
+                    ),
+                    DropdownMenuItem(
+                      value: 'players',
+                      child: Text('عدد اللاعبين', style: TextStyle(fontSize: 12)),
+                    ),
+                    DropdownMenuItem(
+                      value: 'name',
+                      child: Text('الاسم', style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => _countriesSort = value ?? 'value'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // ---------- Country cards ----------
+          Expanded(
+            child: visible.isEmpty
+                ? const Center(
+                    child: Text(
+                      'لا توجد دول مطابقة للبحث',
+                      style: TextStyle(color: Colors.white38, fontSize: 13),
+                    ),
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    itemCount: visible.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) => _countryCard(
+                      data,
+                      visible[index],
+                      playersByCountry[visible[index]] ?? const [],
+                      teamsByCountry[visible[index]] ?? const [],
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _countryBannerStat({
+    required IconData icon,
+    required String value,
+    required String label,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 13, color: const Color(0xff4dd0e1)),
+              const SizedBox(width: 5),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 9.5, color: Colors.white54),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// بطاقة دولة واحدة: رأس ملوّن، إحصائيات، الفرق على اليمين
+  /// واللاعبون على اليسار.
+  Widget _countryCard(
+    SavedGameData data,
+    String country,
+    List<PlayerProfile> players,
+    List<SavedTeamProfile> teams,
+  ) {
+    final color = _countryColor(country);
+    final totalValue =
+        players.fold<double>(0, (sum, player) => sum + player.marketValue);
+    final avgOverall = players.isEmpty
+        ? 0.0
+        : players.fold<double>(
+                0, (sum, player) => sum + player.effectiveOverall) /
+            players.length;
+    final sortedPlayers = [...players]
+      ..sort((a, b) => b.effectiveOverall.compareTo(a.effectiveOverall));
+    final star = sortedPlayers.isEmpty ? null : sortedPlayers.first;
+    final shownPlayers = sortedPlayers.take(8).toList();
+    final initial = country.isEmpty ? '?' : country.substring(0, 1);
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            color.withValues(alpha: 0.16),
+            const Color(0xff0d1a14).withValues(alpha: 0.9),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.45), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.16),
+            blurRadius: 16,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ---------- Header ----------
+            Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [
+                        color,
+                        color.withValues(alpha: 0.55),
+                      ],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: color.withValues(alpha: 0.4),
+                        blurRadius: 10,
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    initial.toUpperCase(),
+                    style: const TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        country,
+                        style: const TextStyle(
+                          fontSize: 16.5,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          _countryMiniChip(
+                            Icons.directions_run,
+                            '${players.length} لاعب',
+                            color,
+                          ),
+                          const SizedBox(width: 6),
+                          _countryMiniChip(
+                            Icons.shield_outlined,
+                            '${teams.length} فريق',
+                            color,
+                          ),
+                          const SizedBox(width: 6),
+                          _countryMiniChip(
+                            Icons.star,
+                            'متوسط ${avgOverall.toStringAsFixed(0)} OVR',
+                            color,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xffffd34d).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: const Color(0xffffd34d).withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        _compactMoney(totalValue),
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xffffd34d),
+                        ),
+                      ),
+                      const Text(
+                        'قيمة اللاعبين',
+                        style: TextStyle(fontSize: 9, color: Colors.white54),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (star != null) ...[
+              const SizedBox(height: 9),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: color.withValues(alpha: 0.35)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.workspace_premium,
+                      size: 15,
+                      color: Color(0xffffd34d),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'نجم الدولة: ',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        color: color.withValues(alpha: 0.95),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        '${star.name}  •  OVR ${star.effectiveOverall.toStringAsFixed(0)}'
+                        '  •  ${star.marketValueText}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          color: Colors.white70,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 10),
+            Divider(height: 1, color: color.withValues(alpha: 0.25)),
+            const SizedBox(height: 10),
+            // ---------- Teams + players ----------
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'الفرق (${teams.length})',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.8,
+                          color: color,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      if (teams.isEmpty)
+                        const Text(
+                          'لا توجد فرق مسجلة',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.white30,
+                          ),
+                        ),
+                      for (final team in teams)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 5),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.045),
+                              borderRadius: BorderRadius.circular(9),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.09),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 11,
+                                  height: 11,
+                                  decoration: BoxDecoration(
+                                    color: team.jerseyKits.isEmpty
+                                        ? Colors.white38
+                                        : team
+                                            .jerseyKits[
+                                              team.activeKitIndex %
+                                                  team.jerseyKits.length
+                                            ]
+                                            .shirtColor,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white24),
+                                  ),
+                                ),
+                                const SizedBox(width: 7),
+                                Expanded(
+                                  child: Text(
+                                    team.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  '${team.playerIds.length} لاعب',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.white38,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 3,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'اللاعبون (${players.length})',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.8,
+                          color: color,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      if (players.isEmpty)
+                        const Text(
+                          'لا يوجد لاعبون مسجلون',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.white30,
+                          ),
+                        ),
+                      for (final player in shownPlayers)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Row(
+                            children: [
+                              Icon(
+                                player.isGoalkeeper
+                                    ? Icons.back_hand
+                                    : Icons.directions_run,
+                                size: 12,
+                                color: player.isGoalkeeper
+                                    ? const Color(0xffffd34d)
+                                    : Colors.white38,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  player.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                _teamForPlayer(data, player)?.name ?? '—',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.white38,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: color.withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  '${player.effectiveOverall.toStringAsFixed(0)}',
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w900,
+                                    color: color,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (sortedPlayers.length > shownPlayers.length)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            '+ ${sortedPlayers.length - shownPlayers.length} لاعب آخر',
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              color: Colors.white38,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _countryMiniChip(IconData icon, String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: color),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w800,
+              color: color.withValues(alpha: 0.95),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _playerPool(SavedGameData data) {
     final query = _playerSearch.trim().toLowerCase();
     bool matches(PlayerProfile player) =>
@@ -1830,6 +2508,9 @@ class _SetupScreenState extends State<SetupScreen> {
           'value' => b.marketValue.compareTo(a.marketValue),
           'ovr' => b.effectiveOverall.compareTo(a.effectiveOverall),
           'matches' => b.matchesPlayed.compareTo(a.matchesPlayed),
+          'delta' => b.marketValueDelta.abs().compareTo(
+              a.marketValueDelta.abs(),
+            ),
           _ => (() {
               final aAvg =
                   a.matchesPlayed == 0 ? -1.0 : a.points / a.matchesPlayed;
@@ -1945,6 +2626,10 @@ class _SetupScreenState extends State<SetupScreen> {
                       DropdownMenuItem(
                         value: 'matches',
                         child: Text('عدد المباريات', style: TextStyle(fontSize: 12)),
+                      ),
+                      DropdownMenuItem(
+                        value: 'delta',
+                        child: Text('أكبر تغيّر بالقيمة', style: TextStyle(fontSize: 12)),
                       ),
                     ],
                     onChanged: (value) =>
@@ -2179,6 +2864,12 @@ class _SetupScreenState extends State<SetupScreen> {
                     _poolStat('مباريات', '${profile.matchesPlayed}'),
                     _poolStat('دقائق', '${profile.minutesPlayed.round()}'),
                     _poolStat('القيمة', profile.marketValueText),
+                    // مقدار آخر تغيّر في القيمة التسويقية لكل لاعب
+                    // (مطلب: يظهر أديش ارتفع أو نزل).
+                    if (profile.marketValueDelta.abs() >= 1)
+                      _marketDeltaChip(profile.marketValueDelta)
+                    else
+                      _poolStat('التغيّر', 'مستقر'),
                     _poolStat(
                       'جاهزية',
                       '${(profile.fitness * 100).round()}%',
@@ -2233,6 +2924,47 @@ class _SetupScreenState extends State<SetupScreen> {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// شريحة «التغيّر» في صفحة اللاعبين: ▲ أخضر ارتفاع / ▼ أحمر نزول
+  /// (مطلب: يظهر لكل لاعب أديش تغيّرت قيمته التسويقية).
+  Widget _marketDeltaChip(double delta) {
+    final rising = delta > 0;
+    final color = rising ? const Color(0xff2ee59d) : const Color(0xffff6b6b);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                rising
+                    ? Icons.arrow_upward_rounded
+                    : Icons.arrow_downward_rounded,
+                size: 11,
+                color: color,
+              ),
+              const SizedBox(width: 2),
+              Text(
+                '${rising ? '+' : '-'}${_compactMoney(delta.abs())}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+          const Text('التغيّر', style: TextStyle(fontSize: 9, color: Colors.white38)),
         ],
       ),
     );
@@ -2320,7 +3052,7 @@ class _SetupScreenState extends State<SetupScreen> {
             ),
             const SizedBox(height: 18),
             FilledButton.icon(
-              onPressed: () => _openAdminLogin(targetTab: 6),
+              onPressed: () => _openAdminLogin(targetTab: 7),
               icon: const Icon(Icons.password),
               label: const Text('Sifre ile ac'),
             ),
@@ -3838,6 +4570,25 @@ class _SetupScreenState extends State<SetupScreen> {
                 style: const TextStyle(fontSize: 11, color: Color(0xff9ff5d2)),
               ),
             ),
+            const SizedBox(width: 10),
+            // مزامنة بضغطة: اللاعبون بلا دولة يرثون دولة فرقهم.
+            OutlinedButton.icon(
+              onPressed: () => _syncPlayersWithTeamCountries(data),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 9,
+                ),
+                side: BorderSide(
+                  color: const Color(0xff4dd0e1).withValues(alpha: 0.45),
+                ),
+              ),
+              icon: const Icon(Icons.sync, size: 15, color: Color(0xff4dd0e1)),
+              label: const Text(
+                'Oyunculari takim ulkesine esitle',
+                style: TextStyle(fontSize: 11),
+              ),
+            ),
           ],
         ),
         if (unassigned > 0) ...[
@@ -4054,7 +4805,9 @@ class _SetupScreenState extends State<SetupScreen> {
     );
   }
 
-  /// زر صغير لفتح حوار تعيين الدولة للاعب أو فريق.
+  /// زر صغير لفتح حوار تعيين الدولة للاعب أو فريق. عند الفريق يفتح
+  /// حواراً فيه خيار «تطبيق على لاعبي الفريق أيضاً» حتى تتبع تشكيلة
+  /// الفريق دولته بضغطة واحدة (مطلب: منطق الدول أسهل وأسرع).
   Widget _countryAssignButton(
     SavedGameData data, {
     required bool isTeam,
@@ -4064,16 +4817,17 @@ class _SetupScreenState extends State<SetupScreen> {
       onPressed: () {
         if (isTeam) {
           final team = data.teams.firstWhere((item) => item.id == id);
-          _assignCountry(team.country, (country) {
-            setState(() => team.country = country);
-            _save();
-          });
+          _assignTeamCountry(team);
         } else {
           final player = data.players.firstWhere((item) => item.id == id);
-          _assignCountry(player.country, (country) {
-            setState(() => player.country = country);
-            _save();
-          });
+          _assignCountry(
+            player.country,
+            title: player.name,
+            onPicked: (country) {
+              setState(() => player.country = country);
+              _save();
+            },
+          );
         }
       },
       style: OutlinedButton.styleFrom(
@@ -4084,16 +4838,67 @@ class _SetupScreenState extends State<SetupScreen> {
     );
   }
 
+  /// تعيين دولة لفريق — مع خيار تطبيقها على كل لاعبيه دفعة واحدة.
+  Future<void> _assignTeamCountry(SavedTeamProfile team) async {
+    await _assignCountry(
+      team.country,
+      title: team.name,
+      offerTeamSync: true,
+      onPicked: (country, {required bool includePlayers}) {
+        setState(() {
+          team.country = country;
+          if (includePlayers) {
+            for (final player in _data?.players ?? const <PlayerProfile>[]) {
+              if (team.playerIds.contains(player.id)) {
+                player.country = country;
+              }
+            }
+          }
+        });
+        _save();
+      },
+    );
+  }
+
+  /// مزامنة سريعة: كل لاعب بلا دولة يرث دولة فريقه إن كانت معيّنة
+  /// (مطلب: تزبيط منطق الدول في الإدارة بضغطة واحدة).
+  void _syncPlayersWithTeamCountries(SavedGameData data) {
+    var updated = 0;
+    setState(() {
+      for (final player in data.players) {
+        if (player.country != 'غير محدد') continue;
+        final team = _teamForPlayer(data, player);
+        if (team == null || team.country == 'غير محدد') continue;
+        player.country = team.country;
+        updated++;
+      }
+    });
+    _save();
+    _showMessage(
+      updated == 0
+          ? 'لا يوجد لاعبون يحتاجون مزامنة'
+          : 'تم منح $updated لاعباً دولة فرقهم',
+    );
+  }
+
   /// حوار اختيار الدولة: حقل نص حر + اقتراحات الدول الموجودة،
-  /// والفراغ يعيد «غير محدد».
+  /// والفراغ يعيد «غير محدد». عند [offerTeamSync] يظهر خيار تطبيق
+  /// الدولة على كل لاعبي الفريق.
   Future<void> _assignCountry(
-    String current,
-    void Function(String country) onPicked,
-  ) async {
+    String current, {
+    required void Function(
+      String country, {
+      required bool includePlayers,
+    })
+    onPicked,
+    String? title,
+    bool offerTeamSync = false,
+  }) async {
     final data = _data;
     final controller = TextEditingController(
       text: current == 'غير محدد' ? '' : current,
     );
+    var includePlayers = false;
     final suggestions = <String>{
       if (data != null) ...[
         for (final player in data.players)
@@ -4108,7 +4913,7 @@ class _SetupScreenState extends State<SetupScreen> {
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
           backgroundColor: const Color(0xff0e1c17),
-          title: const Text('Ulke ata'),
+          title: Text(title == null ? 'Ulke ata' : 'Ulke ata — $title'),
           content: SizedBox(
             width: 420,
             child: Column(
@@ -4126,8 +4931,26 @@ class _SetupScreenState extends State<SetupScreen> {
                   onSubmitted: (value) =>
                       Navigator.of(dialogContext).pop(),
                 ),
+                if (offerTeamSync)
+                  CheckboxListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: const Text(
+                      'Takimdaki butun oyunculara da uygula',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    subtitle: const Text(
+                      'Secilen ulke takim ve oyuncularina birlikte atanir',
+                      style: TextStyle(fontSize: 10.5, color: Colors.white54),
+                    ),
+                    value: includePlayers,
+                    onChanged: (value) => setDialogState(
+                      () => includePlayers = value ?? false,
+                    ),
+                  ),
                 if (suggestions.isNotEmpty) ...[
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 6),
                   SizedBox(
                     height: 110,
                     child: SingleChildScrollView(
@@ -4163,7 +4986,10 @@ class _SetupScreenState extends State<SetupScreen> {
             FilledButton(
               onPressed: () {
                 final country = controller.text.trim();
-                onPicked(country.isEmpty ? 'غير محدد' : country);
+                onPicked(
+                  country.isEmpty ? 'غير محدد' : country,
+                  includePlayers: includePlayers,
+                );
                 Navigator.of(dialogContext).pop();
               },
               style: FilledButton.styleFrom(
@@ -4495,10 +5321,7 @@ class _SetupScreenState extends State<SetupScreen> {
       if (ids != null && !ids.contains(player.id)) continue;
       // No arbitrary 5-billion ceiling: admin adjustment may go as high as
       // the profile model allows (مطلب: تعديل القيمة بدون سقف الـ 5 مليار).
-      player.marketValue =
-          (player.marketValue * factor + flat)
-              .clamp(PlayerProfile.minMarketValue, PlayerProfile.maxMarketValue)
-              .toDouble();
+      player.applyMarketValue(player.marketValue * factor + flat);
       changed++;
     }
     _save();
@@ -4600,7 +5423,7 @@ class _SetupScreenState extends State<SetupScreen> {
             ),
             const SizedBox(height: 18),
             FilledButton.icon(
-              onPressed: () => _openAdminLogin(targetTab: 5),
+              onPressed: () => _openAdminLogin(targetTab: 6),
               icon: const Icon(Icons.password),
               label: const Text('Sifre ile ac'),
             ),
@@ -4995,13 +5818,7 @@ class _SetupScreenState extends State<SetupScreen> {
                   ),
                   onPressed: () {
                     setState(() {
-                      profile.marketValue =
-                          (profile.marketValue + delta)
-                              .clamp(
-                                PlayerProfile.minMarketValue,
-                                PlayerProfile.maxMarketValue,
-                              )
-                              .toDouble();
+                      profile.applyMarketValue(profile.marketValue + delta);
                     });
                     _save();
                   },
