@@ -647,19 +647,19 @@ class MatchEngine {
       return;
     }
     if (substitutionPaused) {
-      // The substitution/VAR break lets every player catch his breath:
-      // stamina recovers during the stoppage
-      // (مطلب: أثناء التبديل والفار اللاعبون يستريحون وتزيد طاقتهم).
-      _recoverStaminaAll(dt * 0.030);
+      // The substitution/VAR break lets every player catch his breath —
+      // but only a little: in-match rest stays far below half-time rest
+      // (مطلب: نسبة الاستراحة أثناء اللعبة أقل بكثير).
+      _recoverStaminaAll(dt * 0.010);
       return;
     }
     _tickCooldowns(dt);
 
     if (_pauseTimer > 0) {
       _pauseTimer -= dt;
-      // Match pauses (VAR reviews, banners, set-piece organisation) also
-      // give the players a small recovery window.
-      _recoverStaminaAll(dt * 0.018);
+      // Match pauses (VAR reviews, banners, set-piece organisation) give
+      // only a very small recovery window.
+      _recoverStaminaAll(dt * 0.006);
       _recordReplay(dt);
       if (_pauseTimer <= 0) {
         final callback = _afterPause;
@@ -1407,7 +1407,14 @@ class MatchEngine {
             .clamp(-1.0, 1.0)
             .toDouble();
         // Running straight is effortless; a 180° turn barely accelerates.
-        accelScale = 0.55 + 0.45 * (turnAlignment + 1) / 2;
+        // Turning agility now follows the player's skill: nimble players
+        // snap through direction changes, clumsy ones arc wide
+        // (مطلب: سرعة الدوران على حسب مهارة اللاعب).
+        final agility = 0.50 +
+            player.profile.balanceSkill * 0.30 +
+            player.profile.speedSkill * 0.20;
+        accelScale = (0.64 + 0.36 * (turnAlignment + 1) / 2) *
+            (0.78 + agility * 0.72);
       }
       // Tired legs explode off the mark slower — acceleration follows
       // stamina just like top speed does.
@@ -2115,6 +2122,9 @@ class MatchEngine {
       }
 
       if (ball.heightMeters > 1.15 && !player.isGoalkeeper) {
+        // A team-mate touching the pass — even with a header — completes
+        // it (مطلب: التمريرة الناجحة بمجرد لمس الزميل لها).
+        _recordTeammateTouch(player);
         player
           ..jumpBoostMeters = math.max(player.jumpBoostMeters, 0.11)
           ..jumpAnimationTimer = 0.48;
@@ -2136,6 +2146,7 @@ class MatchEngine {
       }
 
       if (!_canSecureControl(player)) {
+        _recordTeammateTouch(player);
         _deflectFromPlayer(player, strong: true);
         return;
       }
@@ -3586,10 +3597,13 @@ class MatchEngine {
             .round()
             .clamp(5, 35)
             .toInt();
-        player.profile.injuredDaysRemaining = math.max(
-          player.profile.injuredDaysRemaining,
-          days,
-        ).toInt();
+        if (days > player.profile.injuredDaysRemaining) {
+          player.profile.startInjury(
+            days,
+            DateTime.now(),
+            3 + random.nextInt(3),
+          );
+        }
         player.isInjuredInMatch = true;
         injuryEvents.add(
           InjuryEvent(
@@ -4234,12 +4248,13 @@ class MatchEngine {
           player.movementIntensity < 0.22 &&
           player.stamina < playerFitnessCap(player)) {
         // Idle recovery: standing/walking players slowly recharge toward
-        // their fitness ceiling. Kept gentle so the overall match drain
-        // stays visible.
+        // their fitness ceiling — deliberately minimal so fatigue stays
+        // visible throughout the match
+        // (مطلب: الاستراحة أثناء اللعب قليلة جداً).
         player.stamina = math.min(
           playerFitnessCap(player),
           player.stamina +
-              dt * 0.0010 * (0.55 + player.profile.staminaSkill * 0.65),
+              dt * 0.00045 * (0.55 + player.profile.staminaSkill * 0.65),
         );
         continue;
       }
@@ -4405,6 +4420,15 @@ class MatchEngine {
             ..jumpBoostMeters = math.max(player.jumpBoostMeters, 0.13)
             ..jumpAnimationTimer = 0.48;
         }
+        // A free kick delivered toward the opponent box (shot, pass or
+        // long ball) turns into a full set-piece attack: the attackers
+        // flood the box and everyone of the defending side drops back —
+        // while two attackers always stay home for the counter
+        // (مطلب: الركلة للمنطقة = الكل يدافع والطرف الثاني يحضر للهجوم).
+        if (_freeKickDeliveryIntoBox(team)) {
+          setPieceAttackTeamId = team.id;
+          setPieceAttackTimer = 5.0;
+        }
       }
       restartKind = null;
       restartTeamId = null;
@@ -4415,6 +4439,25 @@ class MatchEngine {
         player.restartTarget = null;
       }
     }
+  }
+
+  /// True when the free kick that was just released is genuinely aimed at
+  /// the opponent penalty area (the spot is close enough to goal and the
+  /// ball travels toward it).
+  bool _freeKickDeliveryIntoBox(TeamGame team) {
+    final spot = _restartSpot;
+    if (spot == null) {
+      return false;
+    }
+    final goal = goalCenterFor(team);
+    if (spot.distanceTo(goal) > 480) {
+      return false;
+    }
+    final towardGoal = (goal - ball.pos).normalized(Vec2(0, 1));
+    final kickDir = ball.vel.lengthSquared > 0.01
+        ? ball.vel.normalized()
+        : towardGoal;
+    return kickDir.dot(towardGoal) > 0.55;
   }
 
   void _tickSetPieceAttack(double dt) {
@@ -5288,10 +5331,10 @@ class MatchEngine {
       final rawDays = minimum + random.nextInt(spread);
       final durationFactor = (1.34 - resistance * 0.72).clamp(0.62, 1.30);
       final days = (rawDays * durationFactor).round().clamp(4, 90).toInt();
-      victim.profile.injuredDaysRemaining = days;
-      // The recovery clock starts now: every real day reduces the injury
-      // by one day.
-      victim.profile.injuryUpdatedAt = DateTime.now().millisecondsSinceEpoch;
+      // The recovery clock starts now with recorded dates: every real day
+      // heals 3–5 injury days (مطلب: الاصابة كل يوم يمر ك 3-5 ايام).
+      final dailyRecovery = 3 + random.nextInt(3);
+      victim.profile.startInjury(days, DateTime.now(), dailyRecovery);
       victim.isInjuredInMatch = true;
       injuryEvents.add(
         InjuryEvent(
@@ -5418,11 +5461,11 @@ class MatchEngine {
     final towardGoal = (ownGoal - ball.pos).normalized(
       Vec2(-defending.attackDirection.toDouble(), 0),
     );
-    // The regulation 9.15 m wall distance plus a small extra step: standing
-    // a little farther back lets a strong shot lift over the wall
-    // (مطلب: الحائط يبعد شوي حتى تعدي التسديدة من فوقه حسب شدتها).
+    // The extended wall distance plus an extra step: standing farther back
+    // lets a strong shot lift over the wall and keeps the wall honest
+    // (مطلب: الحائط البشري أبعد).
     final lineCenter = ball.pos +
-        towardGoal * (GameConstants.freeKickWallDistancePx + 13);
+        towardGoal * (GameConstants.freeKickWallDistancePx + 20);
     final lateral = Vec2(-towardGoal.y, towardGoal.x);
     for (var index = 0; index < selected.length; index++) {
       final offset = index - (selected.length - 1) / 2;

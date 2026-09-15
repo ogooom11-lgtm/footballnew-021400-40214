@@ -78,10 +78,14 @@ class PlayerAi {
     if (engine.restartKind == RestartKind.kickoff) {
       return;
     }
-    // During a corner the defenders man-mark the nearest attacker so the
-    // box stays tight — every player picks up a player.
-    if (engine.isCornerAttackActiveFor(opponent) && player.role.isDefender) {
-      final mark = _cornerMarkTarget(player, opponent, engine);
+    // During a set-piece attack against us EVERYONE drops back to defend:
+    // defenders man-mark the nearest attacker, the rest take goal-side
+    // zones around the box — the keeper is never left alone
+    // (مطلب: الكل يجي يدافع وقت الركلة للمنطقة).
+    if (engine.isCornerAttackActiveFor(opponent) && !player.isGoalkeeper) {
+      final mark = player.role.isDefender
+          ? _cornerMarkTarget(player, opponent, engine)
+          : _setPieceDefendZoneTarget(player, opponent, engine);
       if (mark != null) {
         engine.moveTowards(player, mark, 1.0, dt);
         _maybeJumpForHighBall(player, engine);
@@ -209,7 +213,20 @@ class PlayerAi {
       } else {
         final chase = _looseBallChaser(team, engine);
         final dangerLooseBall = engine.isInPenaltyBox(ball.pos, team.id);
-        if (dangerLooseBall &&
+        // A shot in flight is the keeper's ball: nobody sprints after it
+        // in a swarm — the closest man drifts toward the landing area at
+        // most (مطلب: وقت التسديد اللاعبين ما يهجمو على الكرة بسرعة).
+        final shotInFlight =
+            ball.lastKickType == KickType.shoot && ball.owner == null;
+        if (shotInFlight && !dangerLooseBall) {
+          if (chase == player) {
+            finalTarget = _interceptionPoint(player, engine);
+            force += 0.02;
+          } else {
+            final covered = engine.coverageTargetFor(player, team);
+            finalTarget = covered ?? context.dynamicAnchor(player);
+          }
+        } else if (dangerLooseBall &&
             player.pos.distanceTo(ball.pos) < 160 &&
             !player.isGoalkeeper &&
             (chase == player ||
@@ -1158,6 +1175,46 @@ class PlayerAi {
     return target;
   }
 
+  /// Zone marking for non-defenders during a set-piece attack against us:
+  /// stand goal-side of the nearest opponent around the box so every runner
+  /// meets a body (مطلب: الوسط والمهاجمون يرجعون يدافعون بالكرات الثابتة).
+  Vec2? _setPieceDefendZoneTarget(
+    PlayerGame player,
+    TeamGame opponent,
+    MatchEngine engine,
+  ) {
+    final team = engine.teamById(player.teamId);
+    final goal = engine.goalCenterFor(team);
+    PlayerGame? nearest;
+    var bestDistance = 270.0;
+    for (final rival in opponent.players) {
+      if (rival.isGoalkeeper || rival.isSentOff) {
+        continue;
+      }
+      final distance = rival.pos.distanceTo(player.pos);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        nearest = rival;
+      }
+    }
+    final Vec2 target;
+    if (nearest != null) {
+      target = nearest.pos +
+          (goal - nearest.pos).normalized(Vec2(0, 1)) * 16;
+    } else {
+      // No opponent nearby: hold the space between the ball and the goal.
+      target = engine.ball.pos +
+          (goal - engine.ball.pos).normalized(Vec2(0, 1)) * 78;
+    }
+    target.clampTo(
+      GameConstants.leftBound + 28,
+      GameConstants.topBound + 28,
+      GameConstants.rightBound - 28,
+      GameConstants.bottomBound - 28,
+    );
+    return target;
+  }
+
   void _withBall(
     PlayerGame player,
     TeamGame team,
@@ -1532,11 +1589,77 @@ class PlayerAi {
     player.aiCooldown = 0.18 + random.nextDouble() * 0.18;
   }
 
+  /// Which players guard against the counter while the team attacks a
+  /// set-piece: the two most defensive men (holding mid first, then
+  /// full-backs/centre backs) — everyone else floods the box
+  /// (مطلب: يبقى لاعبين يستنو مشان الحذر من المرتدات).
+  bool _isSetPieceStayBack(PlayerGame player, TeamGame team) {
+    final candidates = team.players
+        .where((mate) => !mate.isGoalkeeper && !mate.isSentOff)
+        .toList()
+      ..sort(
+        (a, b) => _stayBackPriority(b).compareTo(_stayBackPriority(a)),
+      );
+    return candidates.take(2).any((mate) => mate == player);
+  }
+
+  double _stayBackPriority(PlayerGame player) {
+    if (player.role == PlayerRole.defensiveMidfielder) {
+      return 3.0;
+    }
+    if (player.role.group == RoleGroup.fullBack) {
+      return 2.6;
+    }
+    if (player.role.group == RoleGroup.centralDefence) {
+      return 2.2;
+    }
+    if (player.role.isMidfield) {
+      return 1.2;
+    }
+    return 0.0;
+  }
+
+  /// The stay-back spot: just past the halfway line, ball-side, ready to
+  /// kill the counter before it starts.
+  Vec2 _setPieceStayBackTarget(
+    PlayerGame player,
+    TeamGame team,
+    MatchEngine engine,
+  ) {
+    final x = team.attackDirection == 1
+        ? GameConstants.leftBound + GameConstants.pitchWidth * 0.56
+        : GameConstants.rightBound - GameConstants.pitchWidth * 0.56;
+    final ballY = clampDoubleValue(
+      engine.ball.pos.y,
+      GameConstants.topBound + 60,
+      GameConstants.bottomBound - 60,
+    );
+    final centerY = GameConstants.virtualHeight / 2;
+    final spreadSign = player.pos.y >= centerY ? 1.0 : -1.0;
+    final target = Vec2(
+      x,
+      centerY + (ballY - centerY) * 0.30 + spreadSign * 52,
+    );
+    target.clampTo(
+      GameConstants.leftBound + 30,
+      GameConstants.topBound + 32,
+      GameConstants.rightBound - 30,
+      GameConstants.bottomBound - 32,
+    );
+    return target;
+  }
+
   Vec2 _cornerAttackTarget(
     PlayerGame player,
     TeamGame team,
     MatchEngine engine,
   ) {
+    // Two players always stay behind the ball as counter cover — the
+    // keeper is never left alone at the back
+    // (مطلب: لاعبين يبقون للخلف للحذر من المرتدات).
+    if (_isSetPieceStayBack(player, team)) {
+      return _setPieceStayBackTarget(player, team, engine);
+    }
     final ball = engine.ball;
     if (ball.heightMeters > 0.7 &&
         ball.pos.distanceTo(player.pos) < 125 &&

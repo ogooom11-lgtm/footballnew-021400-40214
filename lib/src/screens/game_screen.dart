@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
+import '../app/error_report.dart';
 import '../game/enums/ai_difficulty.dart';
 import '../game/enums/ai_play_style.dart';
 import '../game/enums/kick_type.dart';
@@ -92,9 +93,17 @@ class _GameScreenState extends State<GameScreen>
       return;
     }
     final dt = (elapsed - last).inMicroseconds / Duration.microsecondsPerSecond;
-    _applyMovement(dt.clamp(0, 0.05).toDouble());
-    _engine.tick(dt.clamp(0, 0.05).toDouble());
-    _processForcedInjurySubstitution();
+    try {
+      _applyMovement(dt.clamp(0, 0.05).toDouble());
+      _engine.tick(dt.clamp(0, 0.05).toDouble());
+      _processForcedInjurySubstitution();
+    } catch (error, stack) {
+      // Stop the loop and surface the error with a copy button instead of
+      // letting the game crash silently (مطلب: عرض الخطأ أثناء اللعب).
+      _ticker.stop();
+      reportGameError(error, stack);
+      return;
+    }
     if (mounted) {
       setState(() {});
     }

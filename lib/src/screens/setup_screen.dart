@@ -70,6 +70,7 @@ class _SetupScreenState extends State<SetupScreen> {
   String _accountSearch = '';
   String _teamSearch = '';
   String _playerSearch = '';
+  String _playerPoolSort = 'points';
   String _adminPlayerSearch = '';
   String _adminTeamSearch = '';
   final TextEditingController _adminNewTeamController = TextEditingController();
@@ -1794,14 +1795,24 @@ class _SetupScreenState extends State<SetupScreen> {
         query.isEmpty ||
         player.name.toLowerCase().contains(query) ||
         (player.number?.toString().contains(query) ?? false);
-    // كل اللاعبين مرتبين من الأفضل للأقل حسب معدل النقاط (puan ortalamasi)
-    // (مطلب: ترتيب اللاعبين حسب معدل النقاط).
+    // كل اللاعبين مرتبين حسب الخيار المحدد (معدل النقاط افتراضياً).
     final ranked = data.players.where(matches).toList()
       ..sort((a, b) {
-        final aAvg = a.matchesPlayed == 0 ? -1.0 : a.points / a.matchesPlayed;
-        final bAvg = b.matchesPlayed == 0 ? -1.0 : b.points / b.matchesPlayed;
-        final byAvg = bAvg.compareTo(aAvg);
-        if (byAvg != 0) return byAvg;
+        final result = switch (_playerPoolSort) {
+          'goals' => b.goals.compareTo(a.goals),
+          'assists' => b.assists.compareTo(a.assists),
+          'value' => b.marketValue.compareTo(a.marketValue),
+          'ovr' => b.effectiveOverall.compareTo(a.effectiveOverall),
+          'matches' => b.matchesPlayed.compareTo(a.matchesPlayed),
+          _ => (() {
+              final aAvg =
+                  a.matchesPlayed == 0 ? -1.0 : a.points / a.matchesPlayed;
+              final bAvg =
+                  b.matchesPlayed == 0 ? -1.0 : b.points / b.matchesPlayed;
+              return bAvg.compareTo(aAvg);
+            })(),
+        };
+        if (result != 0) return result;
         return b.effectiveOverall.compareTo(a.effectiveOverall);
       });
     return Container(
@@ -1860,13 +1871,61 @@ class _SetupScreenState extends State<SetupScreen> {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: TextField(
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search),
-                labelText: 'ابحث عن لاعب (اسم أو رقم)',
-                isDense: true,
-              ),
-              onChanged: (value) => setState(() => _playerSearch = value),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.search),
+                      labelText: 'ابحث عن لاعب (اسم أو رقم)',
+                      isDense: true,
+                    ),
+                    onChanged: (value) =>
+                        setState(() => _playerSearch = value),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                // ترتيب حسب: معدل النقاط، الأهداف، القيمة...
+                SizedBox(
+                  width: 175,
+                  child: DropdownButtonFormField<String>(
+                    value: _playerPoolSort,
+                    isDense: true,
+                    decoration: const InputDecoration(
+                      labelText: 'الترتيب حسب',
+                      isDense: true,
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'points',
+                        child: Text('معدل النقاط', style: TextStyle(fontSize: 12)),
+                      ),
+                      DropdownMenuItem(
+                        value: 'goals',
+                        child: Text('الأهداف', style: TextStyle(fontSize: 12)),
+                      ),
+                      DropdownMenuItem(
+                        value: 'assists',
+                        child: Text('الصناعة', style: TextStyle(fontSize: 12)),
+                      ),
+                      DropdownMenuItem(
+                        value: 'value',
+                        child: Text('القيمة السوقية', style: TextStyle(fontSize: 12)),
+                      ),
+                      DropdownMenuItem(
+                        value: 'ovr',
+                        child: Text('التقييم العام', style: TextStyle(fontSize: 12)),
+                      ),
+                      DropdownMenuItem(
+                        value: 'matches',
+                        child: Text('عدد المباريات', style: TextStyle(fontSize: 12)),
+                      ),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => _playerPoolSort = value ?? 'points'),
+                  ),
+                ),
+              ],
             ),
           ),
           ExpansionTile(
@@ -2092,7 +2151,19 @@ class _SetupScreenState extends State<SetupScreen> {
                     _poolStat('تسديد %', '${profile.shootingAccuracyPercent}'),
                     _poolStat('تصديات', '${profile.saves}'),
                     _poolStat('مباريات', '${profile.matchesPlayed}'),
+                    _poolStat('دقائق', '${profile.minutesPlayed.round()}'),
                     _poolStat('القيمة', profile.marketValueText),
+                    _poolStat(
+                      'جاهزية',
+                      '${(profile.fitness * 100).round()}%',
+                      highlight: profile.fitness < 0.6,
+                    ),
+                    if (profile.yellowCards > 0)
+                      _poolStat('صفراء', '${profile.yellowCards}',
+                          highlight: true),
+                    if (profile.redCards > 0)
+                      _poolStat('حمراء', '${profile.redCards}',
+                          highlight: true),
                   ],
                 ),
                 const SizedBox(height: 6),
@@ -2113,13 +2184,26 @@ class _SetupScreenState extends State<SetupScreen> {
                       )
                     else if (profile.isInjured)
                       _statusBadge(
-                        'مصاب ${profile.injuredDaysRemaining}ي',
+                        'مصاب ${profile.injuredDaysRemaining}ي'
+                        '${profile.injuryExpectedReturnAt > 0 ? ' • عودة ${_formatDate(profile.injuryExpectedReturnAt)}' : ''}',
                         const Color(0xffff6b6b),
                       )
                     else
                       _statusBadge('جاهز', const Color(0xff2ee59d)),
                   ],
                 ),
+                if (profile.isInjured && profile.injuryStartedAt > 0) ...[
+                  const SizedBox(height: 5),
+                  Text(
+                    'إصابة: بداية ${_formatDate(profile.injuryStartedAt)}'
+                    ' — عودة متوقعة ${_formatDate(profile.injuryExpectedReturnAt)}'
+                    ' (كل يوم يشفي ${profile.injuryDailyRecovery} أيام)',
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      color: Color(0xffffb3b3),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -2159,6 +2243,13 @@ class _SetupScreenState extends State<SetupScreen> {
         ],
       ),
     );
+  }
+
+  /// Short day.month date string for injury start / expected-return labels.
+  String _formatDate(int milliseconds) {
+    if (milliseconds <= 0) return '—';
+    final date = DateTime.fromMillisecondsSinceEpoch(milliseconds);
+    return '${date.day}.${date.month}';
   }
 
   Widget _statusBadge(String text, Color color) {
@@ -3797,22 +3888,39 @@ class _SetupScreenState extends State<SetupScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ---- Team-wide value adjust -------------------------------
+          // ---- Selected-players value adjust -------------------------
           Row(
             children: [
-              const Icon(Icons.shield_outlined, size: 18),
+              const Icon(Icons.attach_money, size: 18),
               const SizedBox(width: 6),
-              const Text('قيمة كل لاعبي الفريق:'),
+              Text(
+                _adminSelectedPlayerIds.isEmpty
+                    ? 'قيمة اللاعبين: حدد لاعبين أولاً'
+                    : 'قيمة اللاعبين المحددين (${_adminSelectedPlayerIds.length}):',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: _adminSelectedPlayerIds.isEmpty
+                      ? const Color(0xffffb020)
+                      : Colors.white,
+                ),
+              ),
               const SizedBox(width: 8),
               SizedBox(
                 width: 190,
-                child: DropdownButtonFormField<String>(
+                child: DropdownButtonFormField<String?>(
                   value: _adminValueTeamId,
                   isDense: true,
-                  hint: const Text('اختر فريقاً'),
+                  hint: const Text('كل الفرق'),
                   items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('كل الفرق'),
+                    ),
                     for (final team in data.activeTeams)
-                      DropdownMenuItem(value: team.id, child: Text(team.name)),
+                      DropdownMenuItem<String?>(
+                        value: team.id,
+                        child: Text(team.name),
+                      ),
                   ],
                   onChanged: (value) =>
                       setState(() => _adminValueTeamId = value),
@@ -3828,11 +3936,11 @@ class _SetupScreenState extends State<SetupScreen> {
                 Padding(
                   padding: const EdgeInsets.only(right: 6),
                   child: OutlinedButton(
-                    onPressed: _adminValueTeamId == null
+                    onPressed: _adminSelectedPlayerIds.isEmpty
                         ? null
                         : () => _adjustTeamValues(
                               data,
-                              _adminValueTeamId!,
+                              _adminValueTeamId,
                               factor: factor,
                               flat: flat,
                             ),
@@ -3996,27 +4104,41 @@ class _SetupScreenState extends State<SetupScreen> {
     await _save();
   }
 
+  /// Adjusts the market value of the SELECTED players only — nothing ever
+  /// changes unless specific players are ticked first
+  /// (مطلب: ما لازم تتغير القيمة بدون ما يكون في لاعب معين).
+  /// When a team is chosen the change is limited to its players.
   void _adjustTeamValues(
     SavedGameData data,
-    String teamId, {
+    String? teamId, {
     required double factor,
     required double flat,
   }) {
-    final team = data.teams
-        .where((item) => item.id == teamId && !item.isDeleted)
-        .toList();
-    if (team.isEmpty) return;
-    final ids = team.first.playerIds.toSet();
+    if (_adminSelectedPlayerIds.isEmpty) {
+      _showMessage('حدد لاعباً واحداً على الأقل قبل تعديل القيمة');
+      return;
+    }
+    final team = teamId == null
+        ? null
+        : data.teams
+              .where((item) => item.id == teamId && !item.isDeleted)
+              .toList();
+    final ids = team == null || team.isEmpty ? null : team.first.playerIds.toSet();
     var changed = 0;
     for (final player in data.players) {
-      if (!ids.contains(player.id)) continue;
+      if (!_adminSelectedPlayerIds.contains(player.id)) continue;
+      if (ids != null && !ids.contains(player.id)) continue;
       player.marketValue =
           (player.marketValue * factor + flat).clamp(1000000.0, 5000000000.0)
               .toDouble();
       changed++;
     }
     _save();
-    _showMessage('تم تعديل قيمة $changed لاعباً');
+    if (changed == 0) {
+      _showMessage('لا يوجد لاعب محدد مطابق للفريق المختار');
+    } else {
+      _showMessage('تم تعديل قيمة $changed لاعباً محدداً');
+    }
   }
 
   double? _attributeValue(PlayerProfile profile, String key) => switch (key) {
@@ -4322,23 +4444,135 @@ class _SetupScreenState extends State<SetupScreen> {
   Future<void> _updateMarketValues({required bool strong}) async {
     final data = _data;
     if (data == null) return;
-    var up = 0;
-    var down = 0;
+    final changes = <({String name, double before, double after, double delta})>[];
     setState(() {
       for (final player in data.players) {
         final before = player.marketValue;
         player.recalculateMarketValue(strong: strong);
-        if (player.marketValue > before + 0.5) {
-          up += 1;
-        } else if (player.marketValue < before - 0.5) {
-          down += 1;
+        final delta = player.marketValue - before;
+        if (delta.abs() > 0.5) {
+          changes.add((
+            name: player.name,
+            before: before,
+            after: player.marketValue,
+            delta: delta,
+          ));
         }
       }
     });
     await _save();
+    final up = changes.where((c) => c.delta > 0).length;
+    final down = changes.length - up;
     _showMessage(
       'Piyasa guncellendi (${strong ? 'guclu' : 'hafif'}): $up artti, $down dustu',
     );
+    // Show exactly who rose and who dropped, and by how much
+    // (مطلب: يظهر أديش ارتفع أو نزل كل لاعب).
+    if (changes.isNotEmpty && mounted) {
+      changes.sort((a, b) => b.delta.abs().compareTo(a.delta.abs()));
+      await _showMarketChangesDialog(changes, strong: strong);
+    }
+  }
+
+  Future<void> _showMarketChangesDialog(
+    List<({String name, double before, double after, double delta})> changes, {
+    required bool strong,
+  }) {
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xff0e1c17),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+        ),
+        title: Text(
+          'Piyasa degisimleri (${strong ? 'guclu' : 'hafif'}) — ${changes.length} oyuncu',
+          style: const TextStyle(fontSize: 16),
+        ),
+        content: SizedBox(
+          width: 480,
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: changes.length,
+            separatorBuilder: (_, __) => const Divider(height: 9),
+            itemBuilder: (context, index) {
+              final change = changes[index];
+              final rising = change.delta > 0;
+              final color = rising
+                  ? const Color(0xff2ee59d)
+                  : const Color(0xffff6b6b);
+              return Row(
+                children: [
+                  Icon(
+                    rising
+                        ? Icons.arrow_upward_rounded
+                        : Icons.arrow_downward_rounded,
+                    size: 16,
+                    color: color,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      change.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${_compactMoney(change.before)}  →  ${_compactMoney(change.after)}',
+                    style: const TextStyle(fontSize: 11, color: Colors.white60),
+                  ),
+                  const SizedBox(width: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.13),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: color.withValues(alpha: 0.5)),
+                    ),
+                    child: Text(
+                      '${rising ? '+' : '-'}${_compactMoney(change.delta.abs())}',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w900,
+                        color: color,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xff00d084),
+              foregroundColor: const Color(0xff00130c),
+            ),
+            child: const Text('Tamam'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Compact money text: 1.24 Mr / 850 Mn style.
+  String _compactMoney(double value) {
+    final abs = value.abs();
+    if (abs >= 1e9) return '${(abs / 1e9).toStringAsFixed(2)} Mr';
+    if (abs >= 1e6) return '${(abs / 1e6).toStringAsFixed(1)} Mn';
+    if (abs >= 1e3) return '${(abs / 1e3).toStringAsFixed(0)} B';
+    return abs.toStringAsFixed(0);
   }
 
   Widget _adminPlayerCard(PlayerProfile profile) {
@@ -6009,18 +6243,55 @@ class _SetupScreenState extends State<SetupScreen> {
                             ),
                             SizedBox(
                               width: 34,
-                              child: Text('#${profile.number ?? index + 1}'),
+                              child: Text(
+                                '#${profile.number ?? index + 1}',
+                                style: TextStyle(
+                                  color: profile.isUnavailable
+                                      ? const Color(0xffff6b6b)
+                                      : null,
+                                ),
+                              ),
                             ),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Text(
-                                    profile.name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(fontSize: 13),
+                                  Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          profile.name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            // Injured and suspended players
+                                            // are always red in the lineup
+                                            // (مطلب: المصابين والمعاقبين بالاحمر).
+                                            color: profile.isUnavailable
+                                                ? const Color(0xffff6b6b)
+                                                : null,
+                                            fontWeight: profile.isUnavailable
+                                                ? FontWeight.w900
+                                                : null,
+                                          ),
+                                        ),
+                                      ),
+                                      if (profile.isSuspended) ...[
+                                        const SizedBox(width: 6),
+                                        _statusBadge(
+                                          'موقوف ${profile.suspendedMatchesRemaining}م',
+                                          const Color(0xffff6b6b),
+                                        ),
+                                      ] else if (profile.isInjured) ...[
+                                        const SizedBox(width: 6),
+                                        _statusBadge(
+                                          'مصاب ${profile.injuredDaysRemaining}ي',
+                                          const Color(0xffff6b6b),
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                   Text(
                                     'OVR:${profile.overallRating.toStringAsFixed(0)} DY:${profile.dayaniklilikGucu.toStringAsFixed(0)} ZK:${profile.zekaGucu.toStringAsFixed(0)}',

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../screens/setup_screen.dart';
+import 'error_report.dart';
 
 class BombanFutbolApp extends StatelessWidget {
   const BombanFutbolApp({super.key});
@@ -29,6 +30,10 @@ class BombanFutbolApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Bomban Futbol',
+      // Any runtime error anywhere in the app is displayed on top of the
+      // game with a copy button instead of the silent red crash screen.
+      builder: (context, child) =>
+          GameErrorOverlay(child: child ?? const SizedBox.shrink()),
       theme: ThemeData(
         brightness: Brightness.dark,
         colorScheme: colorScheme,

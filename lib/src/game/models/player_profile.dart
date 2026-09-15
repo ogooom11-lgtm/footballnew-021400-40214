@@ -173,6 +173,9 @@ class PlayerProfile {
     this.fitnessUpdatedAt = 0,
     this.marketValue = 1000000000,
     this.injuryUpdatedAt = 0,
+    this.injuryStartedAt = 0,
+    this.injuryExpectedReturnAt = 0,
+    this.injuryDailyRecovery = 4,
     this.country = 'غير محدد',
     List<PlayerMatchRecord>? matchHistory,
   }) : matchHistory = matchHistory ?? <PlayerMatchRecord>[];
@@ -274,8 +277,19 @@ class PlayerProfile {
   double marketValue;
 
   /// Timestamp (ms) of the last daily injury recovery, so injured players
-  /// lose one injury day per real day that passes.
+  /// lose injury days per real day that passes.
   int injuryUpdatedAt;
+
+  /// Timestamp (ms) when the injury happened (مطلب: تاريخ بداية الاصابة).
+  int injuryStartedAt;
+
+  /// Timestamp (ms) of the expected recovery date
+  /// (مطلب: التاريخ المتوقع للعودة).
+  int injuryExpectedReturnAt;
+
+  /// How many injury days each real day heals: 3–5, fixed per injury
+  /// (مطلب: كل يوم يمر يعدل ك 3-5 ايام من الاصابة).
+  int injuryDailyRecovery;
 
   final List<PlayerMatchRecord> matchHistory;
 
@@ -368,12 +382,16 @@ class PlayerProfile {
     fitnessUpdatedAt = now.millisecondsSinceEpoch;
   }
 
-  /// Every real day that passes removes one injury day. Returns true when
-  /// the remaining injury days actually changed (so the caller can save).
+  /// Every real day that passes heals [injuryDailyRecovery] injury days
+  /// (3–5), so injuries recover several times faster than calendar days
+  /// (مطلب: كل يوم يمر يعدل ك 3-5 ايام من الاصابة). Returns true when the
+  /// remaining injury days actually changed (so the caller can save).
   bool recoverInjuryDays(DateTime now) {
     final nowMs = now.millisecondsSinceEpoch;
     if (injuredDaysRemaining <= 0) {
       injuryUpdatedAt = nowMs;
+      injuryStartedAt = 0;
+      injuryExpectedReturnAt = 0;
       return false;
     }
     if (injuryUpdatedAt <= 0) {
@@ -385,12 +403,31 @@ class PlayerProfile {
     if (elapsedDays <= 0) {
       return false;
     }
+    final healed = elapsedDays * injuryDailyRecovery.clamp(3, 5);
     injuredDaysRemaining = math.max(
       0,
-      injuredDaysRemaining - elapsedDays,
+      injuredDaysRemaining - healed,
     ).toInt();
     injuryUpdatedAt = nowMs;
+    if (injuredDaysRemaining <= 0) {
+      injuryStartedAt = 0;
+      injuryExpectedReturnAt = 0;
+    }
     return true;
+  }
+
+  /// Starts an injury clock with recorded dates: the injury day and the
+  /// expected return day, both shown in the player screens
+  /// (مطلب: يسجل تاريخ بداية الاصابة والتاريخ المتوقع للعودة).
+  void startInjury(int days, DateTime now, int dailyRecovery) {
+    injuredDaysRemaining = days;
+    injuryDailyRecovery = dailyRecovery.clamp(3, 5).toInt();
+    injuryStartedAt = now.millisecondsSinceEpoch;
+    injuryUpdatedAt = injuryStartedAt;
+    final realDaysNeeded =
+        (days / injuryDailyRecovery).ceil().clamp(1, 365).toInt();
+    injuryExpectedReturnAt = injuryStartedAt +
+        realDaysNeeded * Duration.millisecondsPerDay;
   }
 
   /// Base market value for every player: 1 billion.
@@ -738,6 +775,11 @@ class PlayerProfile {
       marketValue: (json['marketValue'] as num?)?.toDouble() ?? 1000000000,
       country: json['country'] as String? ?? 'غير محدد',
       injuryUpdatedAt: (json['injuryUpdatedAt'] as num?)?.toInt() ?? 0,
+      injuryStartedAt: (json['injuryStartedAt'] as num?)?.toInt() ?? 0,
+      injuryExpectedReturnAt:
+          (json['injuryExpectedReturnAt'] as num?)?.toInt() ?? 0,
+      injuryDailyRecovery:
+          (json['injuryDailyRecovery'] as num?)?.toInt() ?? 4,
       matchHistory: (json['matchHistory'] as List<dynamic>? ?? const [])
           .map((item) =>
               PlayerMatchRecord.fromJson(item as Map<String, dynamic>))
@@ -831,6 +873,9 @@ class PlayerProfile {
         'fitnessUpdatedAt': fitnessUpdatedAt,
         'marketValue': marketValue.round(),
         'injuryUpdatedAt': injuryUpdatedAt,
+        'injuryStartedAt': injuryStartedAt,
+        'injuryExpectedReturnAt': injuryExpectedReturnAt,
+        'injuryDailyRecovery': injuryDailyRecovery,
         'country': country,
         'matchHistory': matchHistory.map((r) => r.toJson()).toList(),
       };

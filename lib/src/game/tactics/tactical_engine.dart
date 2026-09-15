@@ -268,6 +268,12 @@ class TacticalEngine {
     if (playState.outOfPossession) {
       lineFraction = math.min(lineFraction, ballAdvance + 0.10);
     }
+    // With the ball in the opponent half the line pushes up together and
+    // squeezes the pitch — the classic offside-line advance
+    // (مطلب: فريقنا يملك الكرة بالنصف الثاني فيتقدم خط الدفاع).
+    if (playState.inPossession && ballAdvance > 0.55) {
+      lineFraction += 0.10;
+    }
     // In the critical zone the line is pinned: it holds and protects the
     // goal instead of stepping out.
     if (ballZone == DangerZone.critical) {
@@ -540,12 +546,19 @@ class TacticalContext {
     // ---- Opponent location: defensive line (plan item 9) --------------
     if (role.group == RoleGroup.centralDefence) {
       final lineFraction = _fractionFromX(defensiveLineX);
-      final fx = math.min(_fractionFromX(target.x), lineFraction);
-      target.x = _xFromFraction(fx);
+      var fx = math.min(_fractionFromX(target.x), lineFraction);
+      // While under attack the line retreats so no defender is ever ahead
+      // of the deepest opponent runner — goal-side first, never play him
+      // onside (مطلب: الدفاع يتراجع بخط التسلل بحيث ما يسبقه المهاجم).
+      if (!inPossession) {
+        fx = math.min(fx, _deepestOpponentAdvance - 0.02);
+      }
+      target.x = _xFromFraction(fx.clamp(0.06, 0.90).toDouble());
     } else if (role.group == RoleGroup.fullBack && !inPossession) {
       final lineFraction = _fractionFromX(defensiveLineX);
-      final fx = math.min(_fractionFromX(target.x), lineFraction + 0.08);
-      target.x = _xFromFraction(fx);
+      var fx = math.min(_fractionFromX(target.x), lineFraction + 0.08);
+      fx = math.min(fx, _deepestOpponentAdvance - 0.01);
+      target.x = _xFromFraction(fx.clamp(0.06, 0.90).toDouble());
     }
 
     // ---- Offside line (plan item 10) ----------------------------------
@@ -586,6 +599,29 @@ class TacticalContext {
         .clamp(GameConstants.topBound + 22, GameConstants.bottomBound - 22)
         .toDouble();
     return target;
+  }
+
+  /// How advanced the deepest opponent outfield player is right now
+  /// (0 = own goal, 1 = opponent goal). The defensive line drops behind
+  /// this value while under attack so no defender gets ahead of the runner.
+  double get _deepestOpponentAdvance {
+    final rival = engine.opponentOf(team);
+    var deepest = 0.0;
+    for (final player in rival.players) {
+      if (player.isGoalkeeper || player.isSentOff) {
+        continue;
+      }
+      if (!(player.role.isAttacker ||
+          player.role.isMidfield ||
+          player.role.isWide)) {
+        continue;
+      }
+      final advance = _fractionFromX(player.pos.x);
+      if (advance > deepest) {
+        deepest = advance;
+      }
+    }
+    return deepest;
   }
 
   double _fractionFromX(double x) {
