@@ -102,13 +102,7 @@ class GoalkeeperAi {
             : GoalkeeperState.comingOut,
         GoalkeeperAction.rushOut,
       );
-      _moveWithAcceleration(
-        keeper,
-        ball.pos,
-        stats,
-        dt,
-        sprint: true,
-      );
+      _moveToRushTarget(keeper, stats, dt, context, engine);
       _resolveContact(keeper, team, engine, stats, context);
       return;
     }
@@ -283,13 +277,48 @@ class GoalkeeperAi {
       return;
     }
 
-    if (action == GoalkeeperAction.diveLeft ||
-        action == GoalkeeperAction.diveRight) {
+    // Realistic keeper movement: RUN first, dive only when the ball is
+    // about to arrive. A far-post shot while the keeper stands at the near
+    // post makes him sprint along the line first — then launch the dive
+    // with just enough lead time. Footwork and reaction decide both the
+    // stride range and the dive lead time
+    // (مطلب: يركض مسافة مناسبة بعدين يقفز).
+    final lateralGap = (saveY - keeper.pos.y).abs();
+    final stepRange = 15 + stats.footwork * 14;
+    final diveLead = (0.30 - stats.reaction * 0.08).clamp(0.18, 0.30);
+    final mustDive = action == GoalkeeperAction.diveLeft ||
+        action == GoalkeeperAction.diveRight;
+    final mustJump = action == GoalkeeperAction.jump;
+    if ((mustDive || mustJump) &&
+        lateralGap > stepRange &&
+        prediction.timeToImpact > diveLead) {
+      // Still time to run: stay on the feet and close the distance fast.
+      _setState(keeper, GoalkeeperState.tracking, GoalkeeperAction.track);
+      _moveWithAcceleration(keeper, target, stats, dt, sprint: true);
+      _resolveContact(keeper, team, engine, stats, context);
+      _updatePredictionDebug(keeper, prediction, context);
+      return;
+    }
+
+    if (mustDive) {
       _startDive(keeper, stats, action);
       _moveWithAcceleration(keeper, target, stats, dt, diving: true);
-    } else if (action == GoalkeeperAction.jump) {
+    } else if (mustJump) {
       _startJump(keeper, stats);
       _moveWithAcceleration(keeper, target, stats, dt, diving: true);
+    } else if (action == GoalkeeperAction.catchBall &&
+        ball.heightMeters < 1.35 &&
+        ball.vel.length < 7.2 &&
+        keeper.pos.distanceTo(ball.pos) < 95) {
+      // A catchable ball on the ground: the keeper steps OUT to meet it
+      // and collects it instead of waiting on the line
+      // (مطلب: يقرب ويمسكها، ما يستناها تجي لعنده).
+      _setState(
+        keeper,
+        GoalkeeperState.comingOut,
+        GoalkeeperAction.catchBall,
+      );
+      _moveWithAcceleration(keeper, ball.pos, stats, dt, sprint: true);
     } else {
       _setState(
         keeper,
@@ -382,6 +411,11 @@ class GoalkeeperAi {
     );
   }
 
+  /// The keeper's dominance zone inside his penalty area: loose balls and
+  /// balls travelling toward him are claimed — but only when he clearly
+  /// beats the attackers to it, so he never charges at every ball
+  /// (مطلب: اله هاله بمنطقة الجزاء، بس مو كل كرة يقدم عليها). All ranges
+  /// and margins scale with his abilities.
   bool _shouldRushLooseBall(
     PlayerGame keeper,
     TeamGame team,
@@ -395,7 +429,8 @@ class GoalkeeperAi {
       final owner = ball.owner!;
       final controlled = ball.vel.length < 2.2;
       return !controlled ||
-          _pitchDistanceMeters(keeper.pos, owner.pos) < 8 + stats.oneVsOne * 3;
+          _pitchDistanceMeters(keeper.pos, owner.pos) <
+              8 + stats.oneVsOne * 3;
     }
     final inBox = engine.isInPenaltyBox(ball.pos, team.id);
     final sweeperRange = context.isThroughBall &&
@@ -405,8 +440,10 @@ class GoalkeeperAi {
       return false;
     }
     final keeperDistance = keeper.pos.distanceTo(ball.pos);
-    if (keeperDistance >
-        (80 + stats.decision * 50) * difficulty.aggressionFactor) {
+    // Comfort radius grows with decision-making.
+    final comfortRadius =
+        (92 + stats.decision * 55) * difficulty.aggressionFactor;
+    if (keeperDistance > comfortRadius) {
       return false;
     }
     final keeperPixelsPerSecond = math.max(80, keeper.speed * 60);
@@ -421,8 +458,50 @@ class GoalkeeperAi {
                     math.max(90, player.speed * 60),
               )
               .reduce(math.min);
-    final decisionMargin = (stats.decision + stats.anticipation) * 0.09;
+    // Base safety margin: the keeper only comes when he clearly wins the
+    // race. A slow ball rolling his way is much safer to claim.
+    var decisionMargin =
+        0.05 + (stats.decision + stats.anticipation) * 0.10;
+    final towardKeeper = keeper.pos.distanceTo(ball.pos + ball.vel * 8) <
+        keeperDistance;
+    if (ball.vel.length < 3.2 && towardKeeper) {
+      decisionMargin *= 0.45;
+    }
     return keeperArrival + decisionMargin < attackerArrival;
+  }
+
+  /// Rush movement: straight to a loose ball at full speed, but in a
+  /// one-v-one the keeper cuts the shooting angle, closes down under
+  /// control and never lunges — he stays on his feet until the attacker
+  /// commits (مطلب: يعرف يتعامل مع الانفراد).
+  void _moveToRushTarget(
+    PlayerGame keeper,
+    GoalkeeperStats stats,
+    double dt,
+    GoalkeeperContext context,
+    MatchEngine engine,
+  ) {
+    final ball = engine.ball;
+    if (context.isOneVsOne && ball.owner != null) {
+      final goal = context.goalCenter;
+      final distance = keeper.pos.distanceTo(ball.pos);
+      if (distance < 58) {
+        // Close enough: hold a goal-side stance between ball and goal,
+        // shrink the angle and wait — no dive, no lunge.
+        final holdSpot = ball.pos +
+            (goal - ball.pos).normalized(Vec2(0, 1)) * 18;
+        _setState(keeper, GoalkeeperState.oneVsOne, GoalkeeperAction.ready);
+        _moveWithAcceleration(keeper, holdSpot, stats, dt);
+        return;
+      }
+      // Closing down: run at the angle-cutting point between ball and goal.
+      final cutDepth = math.min(34.0, distance * 0.32);
+      final target = ball.pos +
+          (goal - ball.pos).normalized(Vec2(0, 1)) * cutDepth;
+      _moveWithAcceleration(keeper, target, stats, dt, sprint: true);
+      return;
+    }
+    _moveWithAcceleration(keeper, ball.pos, stats, dt, sprint: true);
   }
 
   Vec2 _positioningTarget(
@@ -445,9 +524,12 @@ class GoalkeeperAi {
             ? 17
             : 8)
         .toDouble();
+    // Pre-positioning tracks the ball's side a bit more, so a far-post
+    // shot does not catch the keeper glued to the near post — positioning
+    // skill decides how well he reads the side in advance.
     final trackedY = context.goalCenter.y +
         (context.ballPosition.y - context.goalCenter.y) *
-            (0.30 + stats.positioning * 0.17);
+            (0.36 + stats.positioning * 0.20);
     if (keeper.goalkeeperDecisionLockTimer <= 0 ||
         keeper.goalkeeperDecisionTarget == null) {
       final maxErrorMeters = switch (stats.level) {

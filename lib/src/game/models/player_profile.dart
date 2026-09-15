@@ -343,11 +343,17 @@ class PlayerProfile {
     if (matchFoulsCommitted >= 3) {
       composureRating = drift(composureRating, -0.05);
     }
-    // A gentle market-value response to form (±2% at the extremes).
+    // A gentle market-value response to form (±2% at the extremes). The
+    // ceiling follows the profile model's maximum — no separate 5-billion
+    // cap, so admin-set high values are not dragged back down.
     if (rating >= 7.8) {
-      marketValue = (marketValue * 1.02).clamp(1e6, 5e9).toDouble();
+      marketValue =
+          (marketValue * 1.02).clamp(minMarketValue, maxMarketValue)
+              .toDouble();
     } else if (rating < 5.8) {
-      marketValue = (marketValue * 0.985).clamp(1e6, 5e9).toDouble();
+      marketValue =
+          (marketValue * 0.985).clamp(minMarketValue, maxMarketValue)
+              .toDouble();
     }
   }
 

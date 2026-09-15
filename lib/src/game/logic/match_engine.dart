@@ -799,7 +799,9 @@ class MatchEngine {
       }
       return;
     }
-    var maxSpeed = controlled.speed * _teamStrengthFactor(team) * 60;
+    // Every player runs at HIS OWN speed — never faster — whether he is
+    // controlled or AI (مطلب: ما حدا يركد أسرع من سرعته).
+    var maxSpeed = controlled.speed * 60;
     // Ball carriers protect the ball and feel its weight.
     if (ball.owner == controlled) {
       maxSpeed *= 0.86 + controlled.profile.balanceSkill * 0.10;
@@ -1308,9 +1310,11 @@ class MatchEngine {
       return;
     }
     final team = teamById(player.teamId);
-    final clampedForce = force.clamp(0.05, 1.25).toDouble();
-    var maxSpeed =
-        player.speed * _teamStrengthFactor(team) * clampedForce * 60;
+    // Force scales the effort below the player's own top speed; it can
+    // never push him beyond it — controlled or not, everyone runs at his
+    // own pace (مطلب: ما حدا يركد أسرع من سرعته الحقيقية).
+    final clampedForce = force.clamp(0.05, 1.0).toDouble();
+    var maxSpeed = player.speed * clampedForce * 60;
     // Brake into the target so players decelerate before arriving instead
     // of overshooting and oscillating.
     if (diff.length < 26) {
@@ -1392,10 +1396,11 @@ class MatchEngine {
   /// goalkeepers alike so every movement feels physical.
   void _applyMomentum(PlayerGame player, Vec2 desiredVelocity, double dt) {
     final team = teamById(player.teamId);
+    // The absolute ceiling is the player's own top speed — momentum can
+    // never carry anyone past it (مطلب: سقف السرعة = سرعة اللاعب).
     final clampedDesired =
-        desiredVelocity.length > player.speed * _teamStrengthFactor(team) * 1.25 * 60
-        ? desiredVelocity.normalized() *
-            (player.speed * _teamStrengthFactor(team) * 1.25 * 60)
+        desiredVelocity.length > player.speed * 60
+        ? desiredVelocity.normalized() * (player.speed * 60)
         : desiredVelocity;
     final delta = clampedDesired - player.velocity;
     if (delta.lengthSquared > 0.0001) {
@@ -4319,7 +4324,8 @@ class MatchEngine {
       return;
     }
     final team = teamById(player.teamId);
-    var maxSpeed = player.speed * _teamStrengthFactor(team) * 60;
+    // Own speed only, never boosted (مطلب: كل لاعب بيركد بسرعته).
+    var maxSpeed = player.speed * 60;
     if (ball.owner == player) {
       maxSpeed *= 0.86 + player.profile.balanceSkill * 0.10;
     }
@@ -4840,10 +4846,6 @@ class MatchEngine {
     final dx = (first.x - second.x) * 105 / GameConstants.pitchWidth;
     final dy = (first.y - second.y) * 68 / GameConstants.pitchHeight;
     return math.sqrt(dx * dx + dy * dy);
-  }
-
-  double _teamStrengthFactor(TeamGame team) {
-    return (0.92 + team.rating.clamp(1, 99) / 100 * 0.16).clamp(0.92, 1.08);
   }
 
   double? _shotTargetY(TeamGame team, Vec2 direction) {

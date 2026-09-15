@@ -388,20 +388,6 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                   ],
                 ),
               ),
-              if (widget.adminFullAccess) ...[
-                const SizedBox(width: 10),
-                OutlinedButton.icon(
-                  onPressed: () => _deleteTeam(team),
-                  icon: const Icon(Icons.delete_outline, size: 18),
-                  label: const Text('حذف الفريق'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.redAccent,
-                    side: BorderSide(
-                      color: Colors.redAccent.withValues(alpha: 0.5),
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
           const SizedBox(height: 4),
@@ -784,16 +770,8 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
                   : null,
               icon: const Icon(Icons.person_remove_outlined, size: 20),
             ),
-            if (widget.adminFullAccess)
-              IconButton(
-                tooltip: 'حذف اللاعب (الإدارة فقط)',
-                onPressed: () => _deletePlayer(player),
-                icon: const Icon(
-                  Icons.delete_outline,
-                  color: Colors.redAccent,
-                  size: 20,
-                ),
-              ),
+            // حذف اللاعب متاح حصراً من صفحة الإدارة
+            // (مطلب: حذف اللاعبين من الإدارة فقط).
           ],
         ),
       ),
@@ -1249,106 +1227,6 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
     });
     await _save();
   }
-
-  Future<void> _deletePlayer(PlayerProfile player) async {
-    final data = _data;
-    if (data == null) return;
-    // حذف اللاعب متاح فقط لحساب الإدارة (مطلب صريح).
-    if (!widget.adminFullAccess) {
-      _showMessage('حذف اللاعب متاح فقط من حساب الإدارة');
-      return;
-    }
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xff102019),
-        title: const Text('Oyuncuyu sil'),
-        content: Text(
-          '${player.name} oyuncusunu tamamen silmek istediginize emin misiniz?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Vazgec'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Sil'),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true || !mounted) return;
-    setState(() {
-      data.players.removeWhere((item) => item.id == player.id);
-      data.transferRequests.removeWhere(
-        (request) => request.playerId == player.id,
-      );
-      for (final team in data.teams) {
-        team.playerIds.remove(player.id);
-        team.starterPlayerIds.remove(player.id);
-        team.roleByPlayerId.remove(player.id);
-        team.slotByPlayerId.remove(player.id);
-      }
-    });
-    await _save();
-  }
-
-  Future<void> _deleteTeam(SavedTeamProfile team) async {
-    final data = _data;
-    if (data == null) return;
-    // حذف الفريق متاح فقط لحساب الإدارة (مطلب صريح).
-    if (!widget.adminFullAccess) {
-      _showMessage('حذف الفريق متاح فقط من حساب الإدارة');
-      return;
-    }
-    if (data.activeTeams.length <= 1) {
-      _showMessage('En az bir aktif takim kalmali');
-      return;
-    }
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xff102019),
-        title: const Text('Takimi Sil'),
-        content: Text(
-          '${team.name} takimini silmek istediginize emin misiniz?\n'
-          'Bu islem geri alinamaz.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Vazgec'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Sil'),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true || !mounted) return;
-    setState(() {
-      team.isDeleted = true;
-      data.transferRequests.removeWhere(
-        (request) => request.targetTeamId == team.id,
-      );
-      if (_selectedTeamId == team.id) {
-        final remaining = data.activeTeams
-            .where((item) => item.id != team.id)
-            .toList();
-        _selectedTeamId = remaining.isNotEmpty ? remaining.first.id : '';
-      }
-    });
-    await _save();
-    _showMessage('${team.name} takimi silindi');
-  }
-
-  // ---------------------------------------------------------------------
-  // Hidden player values/settings editor — only visible with kimo@ access.
-  // ---------------------------------------------------------------------
 
   Future<void> _editPlayerValues(PlayerProfile player) async {
     final data = _data;

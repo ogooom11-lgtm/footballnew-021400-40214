@@ -78,6 +78,21 @@ class PlayerAi {
     if (engine.restartKind == RestartKind.kickoff) {
       return;
     }
+    // Throw-ins: nobody crowds the ball. The throwing side keeps its
+    // spacing while exactly one team-mate offers a short option; the
+    // defending side keeps a respectful distance instead of pressing
+    // (مطلب: التماس ما حدا يهجم على الكرة ويكون في مساحة).
+    if (engine.restartKind == RestartKind.throwIn &&
+        engine.restartTeamId != null &&
+        !player.isGoalkeeper) {
+      final throwTeam = engine.teamById(engine.restartTeamId!);
+      if (throwTeam.id == team.id) {
+        _throwInAttackShape(player, team, engine, dt);
+      } else {
+        _throwInDefendShape(player, team, engine, dt);
+      }
+      return;
+    }
     // During a set-piece attack against us EVERYONE drops back to defend:
     // defenders man-mark the nearest attacker, the rest take goal-side
     // zones around the box — the keeper is never left alone
@@ -1821,6 +1836,92 @@ class PlayerAi {
       GameConstants.bottomBound - 34,
     );
     return target;
+  }
+
+  /// Throw-in support: the nearest team-mate comes short to OFFER himself,
+  /// the second one opens an angled lane, everyone else keeps clear space
+  /// around the ball — nobody crowds the thrower
+  /// (مطلب: يقرب زميل ويفتح له والباقي مساحة).
+  void _throwInAttackShape(
+    PlayerGame player,
+    TeamGame team,
+    MatchEngine engine,
+    double dt,
+  ) {
+    final taker = engine.ball.owner;
+    if (taker == null || taker == player) {
+      return;
+    }
+    final d = team.attackDirection;
+    final centerY = GameConstants.virtualHeight / 2;
+    final mates = team.players
+        .where((mate) =>
+            mate != taker && !mate.isGoalkeeper && !mate.isSentOff)
+        .toList()
+      ..sort(
+        (a, b) => a.pos
+            .distanceTo(taker.pos)
+            .compareTo(b.pos.distanceTo(taker.pos)),
+      );
+    final rank = mates.indexOf(player);
+    final towardCenter = taker.pos.y >= centerY ? -1.0 : 1.0;
+    Vec2 target;
+    if (rank == 0) {
+      // The short option: close, infield, ready to receive.
+      target = Vec2(
+        taker.pos.x + d * 48,
+        taker.pos.y + towardCenter * 46,
+      );
+    } else if (rank == 1) {
+      // The second option: a slightly deeper angled lane.
+      target = Vec2(
+        taker.pos.x - d * 6,
+        taker.pos.y + towardCenter * 102,
+      );
+    } else {
+      // Everyone else: keep the shape AND clear space around the ball.
+      target = engine.tacticalContextFor(team).dynamicAnchor(player);
+      if (target.distanceTo(taker.pos) < 95) {
+        final away = (target - taker.pos).normalized(
+          Vec2(d.toDouble(), 0),
+        );
+        target = taker.pos + away * 95;
+      }
+    }
+    target.clampTo(
+      GameConstants.leftBound + 34,
+      GameConstants.topBound + 32,
+      GameConstants.rightBound - 34,
+      GameConstants.bottomBound - 32,
+    );
+    engine.moveTowards(player, target, 0.78, dt);
+  }
+
+  /// Throw-in defending: no pressing swarm — hold a compact shape at a
+  /// respectful distance from the ball, and let the closest man watch the
+  /// short option without jumping on it
+  /// (مطلب: وقت التماس ما حدا يهجم على الكرة).
+  void _throwInDefendShape(
+    PlayerGame player,
+    TeamGame team,
+    MatchEngine engine,
+    double dt,
+  ) {
+    final taker = engine.ball.owner;
+    final anchor = engine.tacticalContextFor(team).dynamicAnchor(player);
+    Vec2 target = anchor;
+    if (taker != null && target.distanceTo(taker.pos) < 72) {
+      // Give the thrower space instead of closing him down.
+      final away = (target - taker.pos).normalized(Vec2(0, 1));
+      target = taker.pos + away * 72;
+    }
+    target.clampTo(
+      GameConstants.leftBound + 30,
+      GameConstants.topBound + 30,
+      GameConstants.rightBound - 30,
+      GameConstants.bottomBound - 30,
+    );
+    engine.moveTowards(player, target, 0.70, dt);
   }
 
   bool _shouldLaunchCounter(

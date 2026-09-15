@@ -73,6 +73,7 @@ class _SetupScreenState extends State<SetupScreen> {
   String _playerPoolSort = 'points';
   String _adminPlayerSearch = '';
   String _adminTeamSearch = '';
+  String _countrySearch = '';
   final TextEditingController _adminNewTeamController = TextEditingController();
   final Map<String, String> _lineupSearchByTeam = <String, String>{};
 
@@ -465,17 +466,40 @@ class _SetupScreenState extends State<SetupScreen> {
     _showMessage('$added oyuncu eklendi');
   }
 
+  /// حذف اللاعب نهائياً — من صفحة الإدارة فقط (مطلب صريح: حذف الفرق
+  /// واللاعبين حصراً من صفحة الإدارة).
   Future<void> _deletePlayer(PlayerProfile profile) async {
     final data = _data;
     if (data == null) {
       return;
     }
-    // حذف اللاعبين متاح فقط لحساب الإدارة (kimo@)
-    // (مطلب: حذف اللاعب من حساب الإدارة فقط).
+    // حذف اللاعبين متاح فقط لحساب الإدارة (kimo@).
     if (!data.adminFullAccess) {
-      _showMessage('حذف اللاعب متاح فقط من حساب الإدارة');
+      _showMessage('حذف اللاعب متاح فقط من صفحة الإدارة');
       return;
     }
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xff102019),
+        title: const Text('Oyuncuyu sil'),
+        content: Text(
+          '${profile.name} oyuncusunu tamamen silmek istediginize emin misiniz?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Vazgec'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Sil'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
     setState(() {
       data.players.removeWhere((player) => player.id == profile.id);
       data.bluePlayerIds.remove(profile.id);
@@ -487,9 +511,11 @@ class _SetupScreenState extends State<SetupScreen> {
         team.playerIds.remove(profile.id);
         team.starterPlayerIds.remove(profile.id);
         team.roleByPlayerId.remove(profile.id);
+        team.slotByPlayerId.remove(profile.id);
       }
     });
     await _save();
+    _showMessage('اللاعب محذوف');
   }
 
   Future<void> _assignPlayerToTeam(
@@ -2603,7 +2629,10 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 
   Widget _adminPage(SavedGameData data) {
-    final subTab = _adminSubTab == 2 && !data.adminFullAccess ? 0 : _adminSubTab;
+    final subTab = (_adminSubTab == 2 || _adminSubTab == 4) &&
+            !data.adminFullAccess
+        ? 0
+        : _adminSubTab;
     const accent = Color(0xff00d084);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2737,6 +2766,15 @@ class _SetupScreenState extends State<SetupScreen> {
                   accent: accent,
                   onTap: () => setState(() => _adminSubTab = 2),
                 ),
+              if (data.adminFullAccess)
+                _adminNavItem(
+                  icon: Icons.public,
+                  label: 'Ülkeler',
+                  count: _distinctCountryCount(data),
+                  selected: subTab == 4,
+                  accent: accent,
+                  onTap: () => setState(() => _adminSubTab = 4),
+                ),
               const SizedBox(height: 16),
               const Padding(
                 padding: EdgeInsets.only(left: 4, bottom: 6),
@@ -2794,73 +2832,14 @@ class _SetupScreenState extends State<SetupScreen> {
                 accent: const Color(0xffffd34d),
                 onTap: data.matchArchive.isEmpty ? null : _adminClearArchive,
               ),
+              // إعادة ضبط البيانات محذوفة نهائياً من الإدارة
+              // (مطلب صريح) — يبقى القفل وتنظيف الأرشيف فقط.
               const Spacer(),
-              // ---- Danger zone --------------------------------------
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.redAccent.withValues(alpha: 0.07),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Colors.redAccent.withValues(alpha: 0.35),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(
-                          Icons.warning_amber_rounded,
-                          size: 15,
-                          color: Colors.redAccent,
-                        ),
-                        SizedBox(width: 6),
-                        Text(
-                          'TEHLIKELI BOLGE',
-                          style: TextStyle(
-                            color: Colors.redAccent,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    OutlinedButton.icon(
-                      onPressed: _adminResetAllData,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.redAccent.shade100,
-                        side: BorderSide(
-                          color: Colors.redAccent.withValues(alpha: 0.55),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                      ),
-                      icon: const Icon(Icons.restart_alt, size: 16),
-                      label: const Text(
-                        'Her seyi sifirla',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    OutlinedButton.icon(
-                      onPressed: _lockAdmin,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white70,
-                        side: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.22),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                      ),
-                      icon: const Icon(Icons.lock_outline, size: 16),
-                      label: const Text(
-                        'Sayfayi kilitle',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ),
-                  ],
-                ),
+              _adminQuickTile(
+                icon: Icons.lock_outline,
+                label: 'Sayfayi kilitle',
+                accent: accent,
+                onTap: _lockAdmin,
               ),
             ],
           ),
@@ -2889,6 +2868,7 @@ class _SetupScreenState extends State<SetupScreen> {
                 1 => _adminTeamsTab(data),
                 2 when data.adminFullAccess => _adminPlayersTab(data),
                 3 => _adminTransfersTab(data),
+                4 when data.adminFullAccess => _adminCountriesTab(data),
                 _ => _adminAccountsTab(data),
               },
             ),
@@ -3043,38 +3023,6 @@ class _SetupScreenState extends State<SetupScreen> {
     setState(() => data.matchArchive.clear());
     await _save();
     _showMessage('Mac arsivi temizlendi');
-  }
-
-  /// Danger zone: wipes ALL saved data back to factory defaults.
-  Future<void> _adminResetAllData() async {
-    final ok = await _confirmDialog(
-      'HER SEYI SIFIRLA',
-      'Tum hesaplar, takimlar, oyuncular ve ayarlar silinip baslangic '
-      'durumuna donulecek. Bu islem geri alinamaz. Devam edilsin mi?',
-    );
-    if (ok != true || !mounted) return;
-    final sure = await _confirmDialog(
-      'Emin misiniz?',
-      'Son uyari: tum veriler kalici olarak silinecek.',
-    );
-    if (sure != true || !mounted) return;
-    final fresh = SavedGameData.defaults();
-    fresh.adminLoggedIn = true;
-    fresh.adminFullAccess = _data?.adminFullAccess ?? false;
-    setState(() {
-      _data = fresh;
-      // Keep the setup fields in sync with the fresh defaults, otherwise
-      // _save() would write the old team names back into them.
-      _blueNameController.text = fresh.blueTeam.name;
-      _redNameController.text = fresh.redTeam.name;
-      _blueKitIndex = fresh.blueTeam.activeKitIndex;
-      _redKitIndex = fresh.redTeam.activeKitIndex;
-      _adminSubTab = 0;
-      _accountSearch = '';
-      _adminTeamSearch = '';
-    });
-    await _save();
-    _showMessage('Tum veriler sifirlandi');
   }
 
   /// Shared yes/no confirmation dialog; returns true on confirm.
@@ -3814,6 +3762,423 @@ class _SetupScreenState extends State<SetupScreen> {
     _showMessage('Transfer talebi reddedildi');
   }
 
+  /// Distinct countries across players + teams (sidebar badge count).
+  int _distinctCountryCount(SavedGameData data) {
+    return <String>{
+      for (final player in data.players) player.country,
+      for (final team in data.teams)
+        if (!team.isDeleted) team.country,
+    }.length;
+  }
+
+  /// قسم «الدول» في الإدارة (مطلب جديد): كل دولة تعرض فرقها
+  /// ولاعبيها — حتى لو كان اللاعبون موزعين على فرق مختلفة — مع
+  /// إمكانية تعيين أي لاعب أو فريق لأي دولة.
+  Widget _adminCountriesTab(SavedGameData data) {
+    final playersByCountry = <String, List<PlayerProfile>>{};
+    final teamsByCountry = <String, List<SavedTeamProfile>>{};
+    for (final player in data.players) {
+      playersByCountry.putIfAbsent(player.country, () => []).add(player);
+    }
+    for (final team in data.teams) {
+      if (team.isDeleted) continue;
+      teamsByCountry.putIfAbsent(team.country, () => []).add(team);
+    }
+    final countries = <String>{
+      ...playersByCountry.keys,
+      ...teamsByCountry.keys,
+    }.toList()
+      ..sort((a, b) {
+        // «غير محدد» دائماً في الأسفل.
+        if (a == 'غير محدد') return 1;
+        if (b == 'غير محدد') return -1;
+        return a.compareTo(b);
+      });
+    final unassigned = playersByCountry['غير محدد']?.length ?? 0;
+    final query = _countrySearch.trim().toLowerCase();
+    final visible = countries
+        .where(
+          (country) => query.isEmpty || country.toLowerCase().contains(query),
+        )
+        .toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _adminSectionHeader(
+          icon: Icons.public,
+          accent: const Color(0xff00d084),
+          title: 'Ülkeler — الدول',
+          subtitle:
+              'Her ulke takimlarini ve oyuncularini gosterir — oyuncu baska '
+              'takimda olsa bile listelenir',
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                onChanged: (value) => setState(() => _countrySearch = value),
+                decoration: const InputDecoration(
+                  isDense: true,
+                  prefixIcon: Icon(Icons.search, size: 18),
+                  hintText: 'Ulke ara...',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: const Color(0xff00d084).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Text(
+                '${countries.length} ulke • ${data.players.length} oyuncu',
+                style: const TextStyle(fontSize: 11, color: Color(0xff9ff5d2)),
+              ),
+            ),
+          ],
+        ),
+        if (unassigned > 0) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(
+              color: const Color(0xffffd34d).withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(
+                color: const Color(0xffffd34d).withValues(alpha: 0.4),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  size: 15,
+                  color: Color(0xffffd34d),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    '$unassigned oyuncunun henuz ulkesi yok — «غير محدد» '
+                    'grubundan ulke atayin',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xfff5d67b),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 10),
+        Expanded(
+          child: visible.isEmpty
+              ? const Center(
+                  child: Text(
+                    'Sonuc yok',
+                    style: TextStyle(color: Colors.white38),
+                  ),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  itemCount: visible.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final country = visible[index];
+                    final players = playersByCountry[country] ?? const [];
+                    final teams = teamsByCountry[country] ?? const [];
+                    return ExpansionTile(
+                      initiallyExpanded: country == 'غير محدد',
+                      tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+                      title: Row(
+                        children: [
+                          const Icon(
+                            Icons.flag_outlined,
+                            size: 16,
+                            color: Color(0xffffd34d),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              country,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '${players.length} oyuncu • ${teams.length} takim',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.white54,
+                            ),
+                          ),
+                        ],
+                      ),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (teams.isNotEmpty) ...[
+                                const Text(
+                                  'TAKIMLAR',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    letterSpacing: 1.1,
+                                    color: Colors.white38,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                for (final team in teams)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 3,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.shield_outlined,
+                                          size: 14,
+                                          color: Colors.white54,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            team.name,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                        Text(
+                                          '${team.playerIds.length} oyuncu',
+                                          style: const TextStyle(
+                                            fontSize: 10.5,
+                                            color: Colors.white38,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        _countryAssignButton(
+                                          data,
+                                          isTeam: true,
+                                          id: team.id,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                const SizedBox(height: 8),
+                              ],
+                              const Text(
+                                'OYUNCULAR',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  letterSpacing: 1.1,
+                                  color: Colors.white38,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              if (players.isEmpty)
+                                const Text(
+                                  'Bu ulkede oyuncu yok',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.white30,
+                                  ),
+                                ),
+                              for (final player in players)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 2,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        player.isGoalkeeper
+                                            ? Icons.back_hand
+                                            : Icons.directions_run,
+                                        size: 13,
+                                        color: Colors.white38,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          player.name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ),
+                                      Text(
+                                        _teamForPlayer(data, player)?.name ??
+                                            '—',
+                                        style: const TextStyle(
+                                          fontSize: 10.5,
+                                          color: Colors.white38,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        player.marketValueText,
+                                        style: const TextStyle(
+                                          fontSize: 10.5,
+                                          color: Color(0xffffd34d),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      _countryAssignButton(
+                                        data,
+                                        isTeam: false,
+                                        id: player.id,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  /// زر صغير لفتح حوار تعيين الدولة للاعب أو فريق.
+  Widget _countryAssignButton(
+    SavedGameData data, {
+    required bool isTeam,
+    required String id,
+  }) {
+    return OutlinedButton(
+      onPressed: () {
+        if (isTeam) {
+          final team = data.teams.firstWhere((item) => item.id == id);
+          _assignCountry(team.country, (country) {
+            setState(() => team.country = country);
+            _save();
+          });
+        } else {
+          final player = data.players.firstWhere((item) => item.id == id);
+          _assignCountry(player.country, (country) {
+            setState(() => player.country = country);
+            _save();
+          });
+        }
+      },
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        minimumSize: const Size(0, 26),
+      ),
+      child: const Text('Ülke ata', style: TextStyle(fontSize: 10.5)),
+    );
+  }
+
+  /// حوار اختيار الدولة: حقل نص حر + اقتراحات الدول الموجودة،
+  /// والفراغ يعيد «غير محدد».
+  Future<void> _assignCountry(
+    String current,
+    void Function(String country) onPicked,
+  ) async {
+    final data = _data;
+    final controller = TextEditingController(
+      text: current == 'غير محدد' ? '' : current,
+    );
+    final suggestions = <String>{
+      if (data != null) ...[
+        for (final player in data.players)
+          if (player.country != 'غير محدد') player.country,
+        for (final team in data.teams)
+          if (!team.isDeleted && team.country != 'غير محدد') team.country,
+      ],
+    }.toList()
+      ..sort((a, b) => a.compareTo(b));
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xff0e1c17),
+          title: const Text('Ulke ata'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Ulke adi',
+                    hintText: 'Or: Turkiye, Irak, Katar...',
+                    border: OutlineInputBorder(),
+                  ),
+                  onSubmitted: (value) =>
+                      Navigator.of(dialogContext).pop(),
+                ),
+                if (suggestions.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 110,
+                    child: SingleChildScrollView(
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final country in suggestions)
+                            ActionChip(
+                              label: Text(
+                                country,
+                                style: const TextStyle(fontSize: 11),
+                              ),
+                              onPressed: () {
+                                setDialogState(
+                                  () => controller.text = country,
+                                );
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Vazgec'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final country = controller.text.trim();
+                onPicked(country.isEmpty ? 'غير محدد' : country);
+                Navigator.of(dialogContext).pop();
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xff00d084),
+                foregroundColor: const Color(0xff00130c),
+              ),
+              child: const Text('Kaydet'),
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+  }
+
   Widget _adminPlayersTab(SavedGameData data) {
     final playerQuery = _adminPlayerSearch.trim().toLowerCase();
     final players = data.players
@@ -4128,8 +4493,11 @@ class _SetupScreenState extends State<SetupScreen> {
     for (final player in data.players) {
       if (!_adminSelectedPlayerIds.contains(player.id)) continue;
       if (ids != null && !ids.contains(player.id)) continue;
+      // No arbitrary 5-billion ceiling: admin adjustment may go as high as
+      // the profile model allows (مطلب: تعديل القيمة بدون سقف الـ 5 مليار).
       player.marketValue =
-          (player.marketValue * factor + flat).clamp(1000000.0, 5000000000.0)
+          (player.marketValue * factor + flat)
+              .clamp(PlayerProfile.minMarketValue, PlayerProfile.maxMarketValue)
               .toDouble();
       changed++;
     }
@@ -4593,6 +4961,16 @@ class _SetupScreenState extends State<SetupScreen> {
       subtitle: Text(
         '${profile.heightMeters.toStringAsFixed(2)} m | mac ${profile.matchesPlayed} | puan ${profile.points.toStringAsFixed(1)} | deger ${profile.marketValueText}',
       ),
+      // حذف اللاعب من هنا فقط (مطلب: حذف اللاعبين من صفحة الإدارة فقط).
+      trailing: IconButton(
+        tooltip: 'حذف اللاعب',
+        icon: const Icon(
+          Icons.delete_outline,
+          color: Colors.redAccent,
+          size: 20,
+        ),
+        onPressed: () => _deletePlayer(profile),
+      ),
       childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       children: [
         // Per-player market value steps (مطلب: تعديل قيمة لاعب واحد).
@@ -4619,7 +4997,10 @@ class _SetupScreenState extends State<SetupScreen> {
                     setState(() {
                       profile.marketValue =
                           (profile.marketValue + delta)
-                              .clamp(1000000.0, 5000000000.0)
+                              .clamp(
+                                PlayerProfile.minMarketValue,
+                                PlayerProfile.maxMarketValue,
+                              )
                               .toDouble();
                     });
                     _save();
