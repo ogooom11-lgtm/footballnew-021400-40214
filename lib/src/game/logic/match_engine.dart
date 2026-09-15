@@ -4203,6 +4203,11 @@ class MatchEngine {
     return 'Top bosta';
   }
 
+  /// Movement fatigue: the energy cost per metre grows NON-LINEARLY with
+  /// running speed — jogging burns the base rate, sprinting burns up to
+  /// ~2.4× more per metre. A player who keeps moving (and especially one
+  /// who sprints) tires clearly faster than a player who walks
+  /// (مطلب: يلي يتحرك أكثر بيتعب أسرع).
   void _drainStamina(PlayerGame player, double pixelDistance) {
     if (pixelDistance <= 0.01 || activePenalty != null) {
       return;
@@ -4212,12 +4217,19 @@ class MatchEngine {
         : player.role.isWide || player.role.isAttacker
         ? 1.12
         : 0.92;
+    final nominalTopSpeed = math.max(60.0, player.speed * 60);
+    final effort =
+        (player.velocity.length / nominalTopSpeed).clamp(0.0, 1.0);
+    // Quadratic effort cost: 0.6 at a stand-still jog up to 2.4 at full
+    // sprint — the faster the legs, the harder they burn.
+    final effortCost = 0.60 + effort * effort * 1.80;
     player.stamina = math.max(
       0.12,
       player.stamina -
           pixelDistance *
-              0.000014 *
+              0.000018 *
               roleLoad *
+              effortCost *
               (1.20 - player.profile.staminaSkill * 0.52),
     );
   }
@@ -4251,17 +4263,16 @@ class MatchEngine {
 
   /// Time-based fatigue: even standing players slowly tire so the match
   /// always shows visible tired legs and slower sprints late on
-  /// (مطلب ضروري: منطق التعب والطاقة). Players who barely move catch a
-  /// small breath back — like real football, walking recovers, sprinting
-  /// burns.
+  /// (مطلب ضروري: منطق التعب والطاقة). The drain scales hard with movement
+  /// intensity, so busy players fade while quiet ones keep their legs —
+  /// and idle recovery stays deliberately tiny.
   void _baselineStaminaDrain(double dt) {
     for (final player in allPlayers) {
       if (player.isSentOff) {
         continue;
       }
-      final load = player.isGoalkeeper
-          ? 0.30
-          : 0.55 + player.movementIntensity.clamp(0.0, 1.2);
+      final intensity = player.movementIntensity.clamp(0.0, 1.2);
+      final load = player.isGoalkeeper ? 0.30 : 0.45 + intensity * 1.6;
       if (!player.isGoalkeeper &&
           player.movementIntensity < 0.22 &&
           player.stamina < playerFitnessCap(player)) {
@@ -4272,7 +4283,7 @@ class MatchEngine {
         player.stamina = math.min(
           playerFitnessCap(player),
           player.stamina +
-              dt * 0.00045 * (0.55 + player.profile.staminaSkill * 0.65),
+              dt * 0.00032 * (0.50 + player.profile.staminaSkill * 0.60),
         );
         continue;
       }
@@ -4280,7 +4291,7 @@ class MatchEngine {
         0.12,
         player.stamina -
             dt *
-                0.0008 *
+                0.00095 *
                 load *
                 (1.18 - player.profile.staminaSkill * 0.46),
       );
