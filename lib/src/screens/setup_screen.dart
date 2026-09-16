@@ -3362,12 +3362,10 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 
   Widget _adminPage(SavedGameData data) {
-    final subTab = (_adminSubTab == 2 ||
-                _adminSubTab == 4 ||
-                _adminSubTab == 5) &&
-            !data.adminFullAccess
-        ? 0
-        : _adminSubTab;
+    // «Ülkeler» and «Formalar» are visible with the regular admin password;
+    // only the player-settings tab still needs the kimo@ full access
+    // (مطلب: الدول والقمصان تظهر بكلمة المرور العادية).
+    final subTab = _adminSubTab == 2 && !data.adminFullAccess ? 0 : _adminSubTab;
     const accent = Color(0xff00d084);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3501,24 +3499,23 @@ class _SetupScreenState extends State<SetupScreen> {
                   accent: accent,
                   onTap: () => setState(() => _adminSubTab = 2),
                 ),
-              if (data.adminFullAccess)
-                _adminNavItem(
-                  icon: Icons.public,
-                  label: 'Ülkeler',
-                  count: _distinctCountryCount(data),
-                  selected: subTab == 4,
-                  accent: accent,
-                  onTap: () => setState(() => _adminSubTab = 4),
-                ),
-              if (data.adminFullAccess)
-                _adminNavItem(
-                  icon: Icons.sports_soccer,
-                  label: 'Formalar',
-                  count: data.teams.where((t) => !t.isDeleted).length,
-                  selected: subTab == 5,
-                  accent: accent,
-                  onTap: () => setState(() => _adminSubTab = 5),
-                ),
+              // Ülkeler ve Formalar normal yonetici sifresiyle acilir.
+              _adminNavItem(
+                icon: Icons.public,
+                label: 'Ülkeler',
+                count: _distinctCountryCount(data),
+                selected: subTab == 4,
+                accent: accent,
+                onTap: () => setState(() => _adminSubTab = 4),
+              ),
+              _adminNavItem(
+                icon: Icons.sports_soccer,
+                label: 'Formalar',
+                count: data.teams.where((t) => !t.isDeleted).length,
+                selected: subTab == 5,
+                accent: accent,
+                onTap: () => setState(() => _adminSubTab = 5),
+              ),
               const SizedBox(height: 16),
               const Padding(
                 padding: EdgeInsets.only(left: 4, bottom: 6),
@@ -3612,8 +3609,8 @@ class _SetupScreenState extends State<SetupScreen> {
                 1 => _adminTeamsTab(data),
                 2 when data.adminFullAccess => _adminPlayersTab(data),
                 3 => _adminTransfersTab(data),
-                4 when data.adminFullAccess => _adminCountriesTab(data),
-                5 when data.adminFullAccess => _adminKitsTab(data),
+                4 => _adminCountriesTab(data),
+                5 => _adminKitsTab(data),
                 _ => _adminAccountsTab(data),
               },
             ),
