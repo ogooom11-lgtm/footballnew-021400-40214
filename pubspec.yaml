@@ -35,6 +35,10 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
+  # Multi-file picker used by the admin TXT team import
+  # (مطلب: تحديد اكثر من ملف واستيرادهم بسرعة).
+  file_selector: ^1.0.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

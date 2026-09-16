@@ -205,7 +205,9 @@ class PlayerProfile {
     marketValue = clamped;
   }
   final double heightMeters;
-  final bool isGoalkeeper;
+  // Not final: the admin "Oyuncu yönetimi" page can move a player between
+  // goalkeeper and field roles (مطلب: تحديد وين اللاعب بيلعب).
+  bool isGoalkeeper;
   int? number;
   double overallRating;
   double shootingRating;
@@ -630,11 +632,13 @@ class PlayerProfile {
     required String name,
     required bool isGoalkeeper,
     math.Random? random,
+    double? qualityBase,
+    double? speedValue,
   }) {
     final rng = random ?? math.Random();
     final height = 1.70 + rng.nextDouble() * 0.25;
     final stamp = DateTime.now().microsecondsSinceEpoch;
-    final base = 48 + rng.nextDouble() * 28;
+    final base = qualityBase ?? 48 + rng.nextDouble() * 28;
     final shooting = isGoalkeeper
         ? 28 + rng.nextDouble() * 22
         : base + rng.nextDouble() * 8 - 4;
@@ -645,6 +649,10 @@ class PlayerProfile {
         (keeperRating + offset + rng.nextDouble() * 8 - 4)
             .clamp(15, 97)
             .toDouble();
+    // New players always enter with stamina 60-99 (مطلب: التحمل مرتفع) and
+    // speed inside the 60-92 band; [speedValue] pins an exact value so a
+    // whole squad can share a similar pace (مطلب: سرعات متقاربة).
+    final speed = (speedValue ?? 60 + rng.nextDouble() * 32).clamp(60, 92);
     return PlayerProfile(
       id: '$stamp-${rng.nextInt(999999)}',
       name: name.trim().isEmpty ? 'Oyuncu' : name.trim(),
@@ -693,11 +701,73 @@ class PlayerProfile {
       goalkeeperAnticipationRating: keeperVariation(0),
       goalkeeperParryingRating: keeperVariation(-2),
       goalkeeperDistributionRating: keeperVariation(-2),
-      speedRating: base + rng.nextDouble() * 12 - 6,
-      staminaRating: base + rng.nextDouble() * 12 - 6,
-      dayaniklilikGucu: (base + rng.nextDouble() * 18 - 7).clamp(25, 95).toDouble(),
+      speedRating: speed.toDouble(),
+      staminaRating: 60 + rng.nextDouble() * 39,
+      dayaniklilikGucu: (60 + rng.nextDouble() * 39).clamp(60, 99).toDouble(),
       zekaGucu: 40 + rng.nextDouble() * 30,
     );
+  }
+
+  /// Re-rolls this player's ratings for a quality tier (مطلب: تحديد فريق
+  /// كامل ممتاز/جيد/متوسط/سيئ). Stamina stays high (60-99) and speed keeps
+  /// the given value so squad pace stays uniform.
+  void applyQualityTier(double base, math.Random rng, {double? speedValue}) {
+    double vary(double offset, double spread) =>
+        (base + offset + rng.nextDouble() * spread - spread / 2)
+            .clamp(15, 97)
+            .toDouble();
+    final shooting = isGoalkeeper
+        ? 28 + rng.nextDouble() * 22
+        : vary(0, 8);
+    final keeperRating = isGoalkeeper
+        ? base + 12 + rng.nextDouble() * 10
+        : 20 + rng.nextDouble() * 18;
+    double keeperVariation(double offset) =>
+        (keeperRating + offset + rng.nextDouble() * 8 - 4)
+            .clamp(15, 97)
+            .toDouble();
+    overallRating = vary(0, 6);
+    shootingRating = shooting;
+    finishingRating = (shooting + rng.nextDouble() * 10 - 5)
+        .clamp(20, 96)
+        .toDouble();
+    shotPowerRating = (shooting + 7 + rng.nextDouble() * 8 - 4)
+        .clamp(25, 97)
+        .toDouble();
+    longShotsRating = (shooting - 8 + rng.nextDouble() * 10 - 5)
+        .clamp(15, 95)
+        .toDouble();
+    curveRating = (shooting - 10 + rng.nextDouble() * 14 - 7)
+        .clamp(12, 95)
+        .toDouble();
+    composureRating = vary(0, 12);
+    balanceRating = vary(0, 10);
+    passingRating = vary(0, 8);
+    goalkeepingRating = keeperRating;
+    goalkeeperReactionRating = keeperVariation(1);
+    goalkeeperPositioningRating = keeperVariation(1);
+    goalkeeperDivingRating = keeperVariation(1);
+    goalkeeperHandlingRating = keeperVariation(-2);
+    goalkeeperCatchingRating = keeperVariation(-3);
+    goalkeeperJumpingRating = keeperVariation(0);
+    goalkeeperDecisionRating = keeperVariation(-2);
+    goalkeeperOneVsOneRating = keeperVariation(0);
+    goalkeeperHighBallsRating = keeperVariation(-3);
+    goalkeeperComposureRating = keeperVariation(-2);
+    goalkeeperAccelerationRating = keeperVariation(-1);
+    goalkeeperReachRating = keeperVariation(1);
+    goalkeeperFootworkRating = keeperVariation(-1);
+    goalkeeperAnticipationRating = keeperVariation(0);
+    goalkeeperParryingRating = keeperVariation(-2);
+    goalkeeperDistributionRating = keeperVariation(-2);
+    if (speedValue != null) {
+      speedRating = speedValue.clamp(60, 92).toDouble();
+    } else {
+      speedRating = speedRating.clamp(60, 92).toDouble();
+    }
+    staminaRating = 60 + rng.nextDouble() * 39;
+    dayaniklilikGucu = (60 + rng.nextDouble() * 39).clamp(60, 99).toDouble();
+    zekaGucu = vary(-8, 20);
   }
 
   factory PlayerProfile.fromJson(Map<String, dynamic> json) {
