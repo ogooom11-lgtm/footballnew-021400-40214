@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -14,6 +15,7 @@ import '../game/logic/match_engine.dart';
 import '../game/logic/penalty_logic.dart';
 import '../game/math/vec2.dart';
 import '../game/models/formation.dart';
+import '../game/models/goal_var_view.dart';
 import '../game/models/match_event.dart';
 import '../game/models/player_game.dart';
 import '../game/models/team_game.dart';
@@ -906,6 +908,14 @@ class _GameScreenState extends State<GameScreen>
                   !_engine.finished)
                 _keeperDistributionControls(),
               if (_engine.banner != null) _banner(),
+              // Split-screen VAR goal cameras (مطلب: الفار يشق الشاشة
+              // نصفين — كل نصف مرمى فريق من الأمام).
+              if (_engine.varReviewActive &&
+                  _engine.varReviewCategory == 'goal' &&
+                  _engine.goalVarView != null &&
+                  !_engine.replayMode &&
+                  !_engine.finished)
+                _varGoalCameras(),
               if (_switchModeHint != null) _switchModeHintWidget(),
               if (_engine.wallSelectionPending) _freeKickWallPanel(),
               if (_engine.restartKind != null &&
@@ -1605,6 +1615,255 @@ class _GameScreenState extends State<GameScreen>
       ),
     );
   }
+
+  // =====================================================================
+  // VAR split-screen goal cameras (مطلب: شاشة الفار مقسومة لنصفين، كل
+  // نصف يظهر مرمى فريق من الأمام: وين دخلت الكرة وكيف قفز الحارس).
+  // =====================================================================
+  Widget _varGoalCameras() {
+    final GoalVarView view = _engine.goalVarView!;
+    const accent = Color(0xffb388ff);
+    Widget half(TeamSide side) {
+      final team = _engine.teamBySide(side);
+      final scoredHere = view.concedingSide == side;
+      return Expanded(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: scoredHere
+                  ? const Color(0xff2ee59d).withValues(alpha: 0.8)
+                  : Colors.white.withValues(alpha: 0.12),
+              width: scoredHere ? 2 : 1,
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(11),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _VarGoalFrontPainter(
+                      scoredHere: scoredHere,
+                      entryRatio: view.entryRatio,
+                      entryHeightRatio: view.entryHeightRatio,
+                      keeperOffsetRatio: view.keeperOffsetRatio,
+                      keeperDiveDir: view.keeperDiveDir,
+                      keeperReachRatio: view.keeperReachRatio,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 8,
+                  left: 10,
+                  right: 10,
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: scoredHere
+                              ? const Color(0xff2ee59d)
+                              : Colors.white.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          team.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            color: scoredHere
+                                ? const Color(0xff00130c)
+                                : Colors.white70,
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      if (scoredHere)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xffff4d5a),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'GOL',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                            ),
+                          ),
+                        )
+                      else
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'KONTROL',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white54,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Center(
+      child: IgnorePointer(
+        child: Container(
+          width: 880,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xff141024), Color(0xff0a0f1e)],
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: accent.withValues(alpha: 0.65)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.55),
+                blurRadius: 30,
+                offset: const Offset(0, 14),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(7),
+                      border: Border.all(
+                        color: accent.withValues(alpha: 0.6),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(
+                          Icons.videocam,
+                          size: 14,
+                          color: Color(0xffb388ff),
+                        ),
+                        SizedBox(width: 5),
+                        Text(
+                          'VAR',
+                          style: TextStyle(
+                            color: Color(0xffb388ff),
+                            fontWeight: FontWeight.w900,
+                            fontSize: 12,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'GOL KAMERASI — cepheden gorunum',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    "${view.minute}' • ${view.scoringTeamName} • "
+                    '${view.scorerName}',
+                    style: const TextStyle(
+                      color: Colors.white60,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 330,
+                child: Row(
+                  children: [
+                    half(TeamSide.left),
+                    half(TeamSide.right),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.sports_soccer,
+                    size: 14,
+                    color: Color(0xff2ee59d),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Top cizgiyi ${_percent(view.entryRatio)} noktasindan, '
+                      '${_percent(view.entryHeightRatio)} yuksekten gecti.',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    view.keeperDiveDir == 0
+                        ? 'Kaleci merkezde kaldi'
+                        : view.keeperDiveDir < 0
+                            ? 'Kaleci sola uctu'
+                            : 'Kaleci saga uctu',
+                    style: const TextStyle(
+                      color: Colors.white54,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _percent(double ratio) => '%${(ratio * 100).round()}';
 
   Widget _penaltyKeyboardHint() {
     final penalty = _engine.activePenalty!;
@@ -4188,4 +4447,264 @@ class _RevealState extends State<_Reveal> with SingleTickerProviderStateMixin {
       child: widget.child,
     );
   }
+}
+
+/// Paints one goal from the FRONT for the VAR split-screen cameras
+/// (مطلب: صورة المرمى من الأمام — وين دخلت الكرة وكيف قفز الحارس).
+class _VarGoalFrontPainter extends CustomPainter {
+  _VarGoalFrontPainter({
+    required this.scoredHere,
+    required this.entryRatio,
+    required this.entryHeightRatio,
+    required this.keeperOffsetRatio,
+    required this.keeperDiveDir,
+    required this.keeperReachRatio,
+  });
+
+  final bool scoredHere;
+  final double entryRatio;
+  final double entryHeightRatio;
+  final double keeperOffsetRatio;
+  final int keeperDiveDir;
+  final double keeperReachRatio;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // ---------- backdrop: night stands + pitch ----------
+    final bg = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Color(0xff0c1524), Color(0xff12203a)],
+      ).createShader(Offset.zero & size);
+    canvas.drawRect(Offset.zero & size, bg);
+
+    // Crowd band suggestion.
+    final crowd = Paint()..color = Colors.white.withValues(alpha: 0.05);
+    for (var y = size.height * 0.04;
+        y < size.height * 0.30;
+        y += size.height * 0.035) {
+      canvas.drawRect(
+        Rect.fromLTWH(0, y, size.width, size.height * 0.014),
+        crowd,
+      );
+    }
+
+    final groundY = size.height * 0.86;
+    final grass = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Color(0xff1c5c3c), Color(0xff123c27)],
+      ).createShader(
+        Rect.fromLTWH(0, groundY, size.width, size.height - groundY),
+      );
+    canvas.drawRect(
+      Rect.fromLTWH(0, groundY, size.width, size.height - groundY),
+      grass,
+    );
+
+    // ---------- goal mouth geometry ----------
+    final goalL = size.width * 0.18;
+    final goalR = size.width * 0.82;
+    final barY = size.height * 0.26;
+    final goalH = groundY - barY;
+
+    // Net (behind everything else in the mouth).
+    final net = Paint()
+      ..color = Colors.white.withValues(alpha: 0.16)
+      ..strokeWidth = 1;
+    const netStep = 13.0;
+    for (var x = goalL; x <= goalR; x += netStep) {
+      canvas.drawLine(Offset(x, barY), Offset(x, groundY), net);
+    }
+    for (var y = barY; y <= groundY; y += netStep) {
+      canvas.drawLine(Offset(goalL, y), Offset(goalR, y), net);
+    }
+
+    // Goal-line on the grass.
+    final linePaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.85)
+      ..strokeWidth = 2.5;
+    canvas.drawLine(
+      Offset(size.width * 0.06, groundY),
+      Offset(size.width * 0.94, groundY),
+      linePaint,
+    );
+
+    // Posts + crossbar.
+    final post = Paint()..color = const Color(0xfff2f4f8);
+    const postW = 5.0;
+    canvas.drawRect(Rect.fromLTWH(goalL - postW, barY, postW, goalH), post);
+    canvas.drawRect(Rect.fromLTWH(goalR, barY, postW, goalH), post);
+    canvas.drawRect(
+      Rect.fromLTWH(goalL - postW, barY - postW, goalR - goalL + postW * 2, postW),
+      post,
+    );
+
+    // ---------- entry marker + trajectory ----------
+    if (scoredHere) {
+      final ballR = size.height * 0.032;
+      final ballX = goalL + entryRatio * (goalR - goalL);
+      final ballY = groundY - entryHeightRatio * goalH - ballR;
+
+      // Dashed approach line from the camera side.
+      final traj = Paint()
+        ..color = const Color(0xff2ee59d).withValues(alpha: 0.9)
+        ..strokeWidth = 2
+        ..style = PaintingStyle.stroke;
+      final from = Offset(size.width * 0.04, groundY - size.height * 0.04);
+      final dir = Offset(ballX, ballY) - from;
+      const dashLen = 9.0;
+      var travelled = 0.0;
+      final len = dir.distance;
+      while (travelled < len - ballR - 6) {
+        final a = from + dir * (travelled / len);
+        final b = from + dir * (math.min(travelled + dashLen, len - ballR - 6) / len);
+        canvas.drawLine(a, b, traj);
+        travelled += dashLen * 2;
+      }
+
+      // Entry glow ring + ball.
+      final glow = Paint()
+        ..shader = RadialGradient(
+          colors: [
+            const Color(0xff2ee59d).withValues(alpha: 0.55),
+            const Color(0xff2ee59d).withValues(alpha: 0.0),
+          ],
+        ).createShader(
+          Rect.fromCircle(center: Offset(ballX, ballY), radius: ballR * 4),
+        );
+      canvas.drawCircle(Offset(ballX, ballY), ballR * 4, glow);
+      canvas.drawCircle(Offset(ballX, ballY), ballR, Paint()..color = Colors.white);
+      canvas.drawCircle(
+        Offset(ballX, ballY),
+        ballR,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.4
+          ..color = const Color(0xff0c1524),
+      );
+      // Small crossing X marks where the line was broken.
+      final cross = Paint()
+        ..color = const Color(0xffffd34d)
+        ..strokeWidth = 2;
+      final markY = groundY;
+      canvas.drawLine(
+        Offset(ballX - 6, markY - 6),
+        Offset(ballX + 6, markY + 6),
+        cross,
+      );
+      canvas.drawLine(
+        Offset(ballX + 6, markY - 6),
+        Offset(ballX - 6, markY + 6),
+        cross,
+      );
+    }
+
+    // ---------- goalkeeper ----------
+    final mouthW = goalR - goalL;
+    final keeperX = (goalL + mouthW * (0.5 + keeperOffsetRatio * 0.45))
+        .clamp(goalL + 14, goalR - 14);
+    final keeperH = goalH * 0.62;
+    final lean = scoredHere
+        ? (keeperDiveDir == 0 ? 0.0 : keeperDiveDir * 0.9)
+        : 0.0;
+
+    final hip = Offset(keeperX, groundY - keeperH * 0.42);
+    final shoulder = hip + Offset(math.sin(lean) * keeperH * 0.42, -math.cos(lean) * keeperH * 0.42);
+    final headC = shoulder + Offset(math.sin(lean) * keeperH * 0.16, -math.cos(lean) * keeperH * 0.16);
+
+    final kitPaint = Paint()
+      ..color = scoredHere
+          ? const Color(0xffff8a3d)
+          : const Color(0xff9fb4cc)
+      ..strokeWidth = 5.5
+      ..strokeCap = StrokeCap.round;
+    final skin = Paint()..color = const Color(0xffe8b98d);
+
+    // Legs (planted / trailing during the dive).
+    canvas.drawLine(Offset(keeperX - 8, groundY), hip, kitPaint);
+    canvas.drawLine(
+      Offset(keeperX + 8 - lean * 14, groundY - math.max(0.0, -lean * 10)),
+      hip,
+      kitPaint,
+    );
+    // Torso.
+    canvas.drawLine(hip, shoulder, kitPaint);
+    // Head.
+    canvas.drawCircle(headC, keeperH * 0.09, skin);
+
+    // Arms: both reach toward the ball entry point — hands stop just short,
+    // showing exactly how the keeper flew and missed.
+    final handTarget = scoredHere
+        ? Offset(
+            goalL + entryRatio * mouthW,
+            groundY - entryHeightRatio * goalH,
+          )
+        : Offset(keeperX, barY + goalH * (1 - 0.72));
+    // keeperReachRatio stretches the dive: the keeper flies toward the
+    // ball's height but always arrives a touch short — it was a goal.
+    final reachRatio = scoredHere
+        ? 0.70 + keeperReachRatio * 0.26
+        : 0.55;
+    final armLen = keeperH * 0.52;
+    final toTarget = handTarget - shoulder;
+    final reach = toTarget.distance > armLen
+        ? armLen
+        : toTarget.distance * reachRatio * 1.4;
+    final dirN = toTarget.distance == 0
+        ? const Offset(0, -1)
+        : toTarget * (1 / toTarget.distance);
+    final spread = Offset(-dirN.dy, dirN.dx) * keeperH * 0.10;
+    canvas.drawLine(
+      shoulder,
+      shoulder + dirN * reach + spread,
+      kitPaint,
+    );
+    canvas.drawLine(
+      shoulder,
+      shoulder + dirN * reach * (scoredHere ? 0.9 : 1.0) - spread,
+      kitPaint,
+    );
+
+    // ---------- status chip inside the scene ----------
+    if (!scoredHere) {
+      final chip = Paint()..color = Colors.white.withValues(alpha: 0.10);
+      final rect = Rect.fromCenter(
+        center: Offset(size.width / 2, barY - size.height * 0.09),
+        width: size.width * 0.42,
+        height: size.height * 0.062,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, const Radius.circular(7)),
+        chip,
+      );
+      final tp = TextPainter(
+        text: const TextSpan(
+          text: 'SORUN YOK',
+          style: TextStyle(
+            color: Colors.white70,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(
+        canvas,
+        Offset(rect.center.dx - tp.width / 2, rect.center.dy - tp.height / 2),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_VarGoalFrontPainter oldDelegate) =>
+      oldDelegate.scoredHere != scoredHere ||
+      oldDelegate.entryRatio != entryRatio ||
+      oldDelegate.entryHeightRatio != entryHeightRatio ||
+      oldDelegate.keeperOffsetRatio != keeperOffsetRatio ||
+      oldDelegate.keeperDiveDir != keeperDiveDir ||
+      oldDelegate.keeperReachRatio != keeperReachRatio;
 }

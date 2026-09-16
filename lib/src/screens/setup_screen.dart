@@ -6229,10 +6229,9 @@ class _SetupScreenState extends State<SetupScreen> {
       return;
     }
 
-    // ---------- Quality choice ----------
-    final quality = await _chooseQualityDialog();
-    if (quality == null || !mounted) return;
-
+    // Quality choice was removed on purpose: new players always arrive with
+    // random default ratings — changing a squad's strength is ONLY possible
+    // from the hidden kimo@ admin page (مطلب: خيارات القوة فقط في السري).
     // ---------- Position mode ----------
     final manual = await _choosePositionModeDialog();
     if (manual == null || !mounted) return;
@@ -6271,10 +6270,16 @@ class _SetupScreenState extends State<SetupScreen> {
             cancelled = true;
             break;
           }
+          // [picked] holds DIALOG positions — map them back through [pool] so
+          // duplicated names never drag their twins along.
+          final pickedPlayerIdx = {
+            for (final d in picked)
+              if (d >= 0 && d < pool.length) pool[d],
+          };
           var k = 0;
           final remaining = <int>[];
           for (final i in pool) {
-            if (picked.contains(entry.players[i].name)) {
+            if (pickedPlayerIdx.contains(i)) {
               roles[i] = cycle[k % cycle.length];
               k++;
             } else {
@@ -6347,9 +6352,6 @@ class _SetupScreenState extends State<SetupScreen> {
             name: p.name,
             isGoalkeeper: roles[i] == 'gk',
             random: rng,
-            qualityBase: quality == 'rastgele'
-                ? null
-                : _qualityBase(quality, rng),
             speedValue: speed.toDouble(),
           );
           data.players.add(profile);
@@ -6370,12 +6372,26 @@ class _SetupScreenState extends State<SetupScreen> {
 
   /// Multi-pick dialog: returns the set of chosen names, or null when the
   /// user cancels. Used by the manual position selection of the import.
-  Future<Set<String>?> _multiPickNamesDialog(
+  /// Selection is INDEX based, not name based — if two players share the
+  /// same name only the exact row the user ticks is picked, never every
+  /// duplicate (مطلب: الاسم المكرر ما ينحدد مع كل المكررين).
+  Future<Set<int>?> _multiPickNamesDialog(
     String title,
     List<String> names,
   ) async {
-    final chosen = <String>{};
-    return showDialog<Set<String>>(
+    final chosen = <int>{};
+    // Count duplicates so repeated names get a visible "#2" marker —
+    // computed once, before the dialog, so rebuilds stay deterministic.
+    final counts = <String, int>{};
+    for (final name in names) {
+      counts[name] = (counts[name] ?? 0) + 1;
+    }
+    final occurrenceNumbers = <int>[];
+    final seen = <String, int>{};
+    for (final name in names) {
+      occurrenceNumbers.add(seen[name] = (seen[name] ?? 0) + 1);
+    }
+    return showDialog<Set<int>>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
@@ -6386,17 +6402,36 @@ class _SetupScreenState extends State<SetupScreen> {
             height: 380,
             child: ListView(
               children: [
-                for (final name in names)
+                for (var i = 0; i < names.length; i++)
                   CheckboxListTile(
                     dense: true,
                     controlAffinity: ListTileControlAffinity.leading,
-                    title: Text(name, style: const TextStyle(fontSize: 12.5)),
-                    value: chosen.contains(name),
+                    title: (counts[names[i]] ?? 0) < 2
+                        ? Text(
+                            names[i],
+                            style: const TextStyle(fontSize: 12.5),
+                          )
+                        : Text.rich(
+                            TextSpan(
+                              children: [
+                                TextSpan(text: names[i]),
+                                TextSpan(
+                                  text: '  #${occurrenceNumbers[i]}',
+                                  style: const TextStyle(
+                                    color: Color(0xffffd34d),
+                                    fontSize: 10.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            style: const TextStyle(fontSize: 12.5),
+                          ),
+                    value: chosen.contains(i),
                     onChanged: (value) => setDialogState(() {
                       if (value == true) {
-                        chosen.add(name);
+                        chosen.add(i);
                       } else {
-                        chosen.remove(name);
+                        chosen.remove(i);
                       }
                     }),
                   ),
@@ -6510,69 +6545,6 @@ class _SetupScreenState extends State<SetupScreen> {
     };
   }
 
-  /// Chooses quality tier: rastgele / mükemmel / iyi / orta / kötü.
-  Future<String?> _chooseQualityDialog() {
-    return showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xff0e1c17),
-        title: const Text('Oyuncu kalitesi'),
-        content: SizedBox(
-          width: 360,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final (value, label, desc) in const [
-                ('rastgele', 'Rastgele', 'Karışık yetenekler (varsayılan)'),
-                ('mukemmel', 'Mükemmel', 'Üst düzey oyuncular (82-95)'),
-                ('iyi', 'İyi', 'Kaliteli oyuncular (70-84)'),
-                ('orta', 'Orta', 'Orta seviye oyuncular (58-72)'),
-                ('kotu', 'Kötü', 'Zayıf oyuncular (42-56)'),
-              ])
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: FilledButton.tonal(
-                    onPressed: () =>
-                        Navigator.of(dialogContext).pop(value),
-                    style: FilledButton.styleFrom(
-                      alignment: Alignment.centerRight,
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            label,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          desc,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: Colors.white54,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Vazgeç'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Random or manual positions? (مطلب: يسأل عشوائي ولا اختار أنا).
   Future<bool?> _choosePositionModeDialog() {
     return showDialog<bool>(
       context: context,
@@ -6745,7 +6717,7 @@ class _SetupScreenState extends State<SetupScreen> {
                   setState(() => _adminPlayerSearch = value),
             ),
           ),
-          _adminBulkToolbar(data, players),
+          _adminBulkToolbar(data),
           const Divider(height: 1),
           Expanded(
             child: ListView.builder(
@@ -6759,174 +6731,277 @@ class _SetupScreenState extends State<SetupScreen> {
     );
   }
 
-  /// Bulk admin tools (kimo@ only): team-wide market value steps,
-  /// multi-select attribute editor, countries catalogue
-  /// (مطلب: أدوات الإدارة).
-  Widget _adminBulkToolbar(SavedGameData data, List<PlayerProfile> players) {
+  /// Bulk admin tools (kimo@ only) — redesigned into two clean cards,
+  /// no countries section here anymore (مطلب: صفحة مرتبة بلا ازدحام
+  /// وقسم الدول راح من هون نهائياً).
+  Widget _adminBulkToolbar(SavedGameData data) {
+    final hasSelection = _adminSelectedPlayerIds.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ---- Selected-players value adjust -------------------------
-          Row(
-            children: [
-              const Icon(Icons.attach_money, size: 18),
-              const SizedBox(width: 6),
-              Text(
-                _adminSelectedPlayerIds.isEmpty
-                    ? 'Oyuncu değeri: önce oyuncu seçin'
-                    : 'Seçili oyuncuların değeri (${_adminSelectedPlayerIds.length}):',
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  color: _adminSelectedPlayerIds.isEmpty
-                      ? const Color(0xffffb020)
-                      : Colors.white,
+          // ===================== CARD 1: market value =====================
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.04),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xffffb020).withValues(alpha: 0.30),
                 ),
               ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 190,
-                child: DropdownButtonFormField<String?>(
-                  value: _adminValueTeamId,
-                  isDense: true,
-                  hint: const Text('Tüm takımlar'),
-                  items: [
-                    const DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text('Tüm takımlar'),
-                    ),
-                    for (final team in data.activeTeams)
-                      DropdownMenuItem<String?>(
-                        value: team.id,
-                        child: Text(team.name),
-                      ),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => _adminValueTeamId = value),
-                ),
-              ),
-              const SizedBox(width: 8),
-              for (final (label, factor, flat) in const [
-                ('+Büyük', 1.10, 20000000.0),
-                ('+Küçük', 1.02, 1000000.0),
-                ('-Küçük', 0.98, -1000000.0),
-                ('-Büyük', 0.90, -20000000.0),
-              ])
-                Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: OutlinedButton(
-                    onPressed: _adminSelectedPlayerIds.isEmpty
-                        ? null
-                        : () => _adjustTeamValues(
-                              data,
-                              _adminValueTeamId,
-                              factor: factor,
-                              flat: flat,
-                            ),
-                    child: Text(label),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          // ---- Multi-select attribute editor ------------------------
-          Row(
-            children: [
-              const Icon(Icons.checklist, size: 18),
-              const SizedBox(width: 6),
-              Text(
-                'Seçili: ${_adminSelectedPlayerIds.length}',
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 200,
-                child: DropdownButtonFormField<String>(
-                  value: _adminBulkAttribute,
-                  isDense: true,
-                  hint: const Text('Özellik seç'),
-                  items: [
-                    for (final (key, label) in _adminAttributeChoices)
-                      DropdownMenuItem(value: key, child: Text(label)),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => _adminBulkAttribute = value),
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 110,
-                child: DropdownButtonFormField<int>(
-                  value: _adminBulkStep,
-                  isDense: true,
-                  items: [
-                    for (final step in const [1, 2, 3, 5, 10])
-                      DropdownMenuItem(value: step, child: Text('±$step')),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => _adminBulkStep = value ?? 1),
-                ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: _adminBulkAttribute == null ||
-                        _adminSelectedPlayerIds.isEmpty
-                    ? null
-                    : () => _applyBulkAttribute(1),
-                icon: const Icon(Icons.add),
-                label: const Text('Artır'),
-              ),
-              const SizedBox(width: 6),
-              FilledButton.tonalIcon(
-                onPressed: _adminBulkAttribute == null ||
-                        _adminSelectedPlayerIds.isEmpty
-                    ? null
-                    : () => _applyBulkAttribute(-1),
-                icon: const Icon(Icons.remove),
-                label: const Text('Azalt'),
-              ),
-              const SizedBox(width: 6),
-              TextButton(
-                onPressed: _adminSelectedPlayerIds.isEmpty
-                    ? null
-                    : () => setState(() => _adminSelectedPlayerIds.clear()),
-                child: const Text('Seçimi temizle'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          // ---- Countries catalogue ----------------------------------
-          Row(
-            children: [
-              const Icon(Icons.public, size: 18),
-              const SizedBox(width: 6),
-              const Text('Ülkeler:'),
-              const SizedBox(width: 6),
-              Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      for (final country in data.countries)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 4),
-                          child: InputChip(
-                            label: Text(country, style: const TextStyle(fontSize: 11)),
-                            onDeleted: () =>
-                                setState(() => data.countries.remove(country)),
+                      const Icon(
+                        Icons.payments_outlined,
+                        size: 16,
+                        color: Color(0xffffb020),
+                      ),
+                      const SizedBox(width: 6),
+                      const Text(
+                        'Piyasa degeri',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        hasSelection
+                            ? '${_adminSelectedPlayerIds.length} secili'
+                            : 'oyuncu secin',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: hasSelection
+                              ? const Color(0xff2ee59d)
+                              : const Color(0xffffb020),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String?>(
+                    value: _adminValueTeamId,
+                    isDense: true,
+                    isExpanded: true,
+                    hint: const Text(
+                      'Tüm takımlar',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 6,
+                      ),
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Tüm takımlar'),
+                      ),
+                      for (final team in data.activeTeams)
+                        DropdownMenuItem<String?>(
+                          value: team.id,
+                          child: Text(team.name),
+                        ),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => _adminValueTeamId = value),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      for (final (label, factor, flat) in const [
+                        ('+Büyük', 1.10, 20000000.0),
+                        ('+Küçük', 1.02, 1000000.0),
+                        ('-Küçük', 0.98, -1000000.0),
+                        ('-Büyük', 0.90, -20000000.0),
+                      ])
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.only(right: 5),
+                            child: OutlinedButton(
+                              onPressed: hasSelection
+                                  ? () => _adjustTeamValues(
+                                        data,
+                                        _adminValueTeamId,
+                                        factor: factor,
+                                        flat: flat,
+                                      )
+                                  : null,
+                              style: OutlinedButton.styleFrom(
+                                padding: EdgeInsets.zero,
+                                minimumSize: const Size(0, 28),
+                              ),
+                              child: Text(
+                                label,
+                                style: const TextStyle(fontSize: 10.5),
+                              ),
+                            ),
                           ),
                         ),
                     ],
                   ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          // ===================== CARD 2: attributes =====================
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.04),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xff7ab8ff).withValues(alpha: 0.30),
                 ),
               ),
-              IconButton(
-                tooltip: 'Ülke ekle',
-                onPressed: () => _addCountryToCatalogue(data),
-                icon: const Icon(Icons.add_circle_outline, size: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.tune,
+                        size: 16,
+                        color: Color(0xff7ab8ff),
+                      ),
+                      const SizedBox(width: 6),
+                      const Text(
+                        'Ozellikler',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (hasSelection)
+                        TextButton(
+                          onPressed: () =>
+                              setState(() => _adminSelectedPlayerIds.clear()),
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            minimumSize: const Size(0, 24),
+                          ),
+                          child: const Text(
+                            'Secimi temizle',
+                            style: TextStyle(fontSize: 10.5),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: _adminBulkAttribute,
+                          isDense: true,
+                          isExpanded: true,
+                          hint: const Text(
+                            'Özellik seç',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 6,
+                            ),
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            for (final (key, label) in _adminAttributeChoices)
+                              DropdownMenuItem(
+                                value: key,
+                                child: Text(
+                                  label,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ),
+                          ],
+                          onChanged: (value) =>
+                              setState(() => _adminBulkAttribute = value),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      SizedBox(
+                        width: 74,
+                        child: DropdownButtonFormField<int>(
+                          value: _adminBulkStep,
+                          isDense: true,
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 6,
+                            ),
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            for (final step in const [1, 2, 3, 5, 10])
+                              DropdownMenuItem(
+                                value: step,
+                                child: Text('±$step'),
+                              ),
+                          ],
+                          onChanged: (value) =>
+                              setState(() => _adminBulkStep = value ?? 1),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: _adminBulkAttribute == null || !hasSelection
+                              ? null
+                              : () => _applyBulkAttribute(1),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xff00d084),
+                            foregroundColor: const Color(0xff00130c),
+                            minimumSize: const Size(0, 28),
+                          ),
+                          icon: const Icon(Icons.add, size: 15),
+                          label: const Text(
+                            'Artır',
+                            style: TextStyle(fontSize: 11),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: FilledButton.tonalIcon(
+                          onPressed: _adminBulkAttribute == null || !hasSelection
+                              ? null
+                              : () => _applyBulkAttribute(-1),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(0, 28),
+                          ),
+                          icon: const Icon(Icons.remove, size: 15),
+                          label: const Text(
+                            'Azalt',
+                            style: TextStyle(fontSize: 11),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ],
       ),
@@ -6949,40 +7024,6 @@ class _SetupScreenState extends State<SetupScreen> {
     ('dayaniklilikGucu', 'Sertlik'),
     ('zekaGucu', 'Zeka'),
   ];
-
-  Future<void> _addCountryToCatalogue(SavedGameData data) async {
-    final controller = TextEditingController();
-    final country = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xff102019),
-        title: const Text('Kataloğa ülke ekle'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Ülke adı'),
-          onSubmitted: (value) => Navigator.of(context).pop(value),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Vazgeç'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('Ekle'),
-          ),
-        ],
-      ),
-    );
-    if (country == null || country.trim().isEmpty || !mounted) return;
-    setState(() {
-      if (!data.countries.contains(country.trim())) {
-        data.countries.add(country.trim());
-      }
-    });
-    await _save();
-  }
 
   /// Simple text dialog returning a trimmed string (or null).
   Future<String?> _simpleTextDialog(String title, String label) {

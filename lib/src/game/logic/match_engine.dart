@@ -11,6 +11,7 @@ import '../enums/team_id.dart';
 import '../math/vec2.dart';
 import '../models/ball_game.dart';
 import '../models/formation.dart';
+import '../models/goal_var_view.dart';
 import '../models/match_event.dart';
 import '../models/player_game.dart';
 import '../models/player_profile.dart';
@@ -129,6 +130,10 @@ class MatchEngine {
   bool varReviewActive = false;
   String? varReason;
   String? varReviewCategory;
+
+  /// Frozen goal snapshot driving the VAR split-screen front cameras
+  /// (مطلب: شاشة الفار المقسومة لنصفين، كل نصف مرمى فريق).
+  GoalVarView? goalVarView;
   String? varRecommendedDecision;
   List<String> varDecisionOptions = const [];
   void Function(String decision)? _varDecisionResolver;
@@ -668,6 +673,7 @@ class MatchEngine {
         varReviewActive = false;
         varReason = null;
         varReviewCategory = null;
+        goalVarView = null;
         varRecommendedDecision = null;
         varDecisionOptions = const [];
         _varDecisionResolver = null;
@@ -1243,6 +1249,8 @@ class MatchEngine {
     banner = null;
     varReviewActive = false;
     varReason = null;
+    varReviewCategory = null;
+    goalVarView = null;
     currentOffside = null;
     callback?.call();
   }
@@ -2785,6 +2793,39 @@ class MatchEngine {
       ball.lastTouch!.profile.goals += 1;
       ball.lastTouch!.matchGoals += 1;
     }
+    // ---------- VAR front-camera snapshot (مطلب: الفار يشق الشاشة نصفين
+    // ويصور كل مرمى من الأمام: وين دخلت الكرة وكيف طار الحارس) ----------
+    {
+      final mouthHalf = GameConstants.goalPixelHeight / 2;
+      final centreY = GameConstants.virtualHeight / 2;
+      final keeper = conceding.goalkeeper;
+      final keeperOffset =
+          ((keeper.pos.y - centreY) / mouthHalf).clamp(-1.0, 1.0);
+      final keeperMotion = keeper.velocity.y != 0
+          ? keeper.velocity.y
+          : keeper.pos.y - keeper.homePos.y;
+      final entryH = ball.heightMeters /
+          GameConstants.crossbarMaxMeters;
+      goalVarView = GoalVarView(
+        concedingSide: conceding.side,
+        scoringTeamName: scoringTeam.name,
+        concedingTeamName: conceding.name,
+        scorerName: scorer,
+        minute: minute.ceil(),
+        entryRatio: ((netY - (centreY - mouthHalf)) /
+                GameConstants.goalPixelHeight)
+            .clamp(0.0, 1.0),
+        entryHeightRatio: entryH.clamp(0.0, 1.0),
+        keeperOffsetRatio: keeperOffset,
+        keeperDiveDir: keeperMotion > 4
+            ? 1
+            : keeperMotion < -4
+            ? -1
+            : 0,
+        // The keeper reaches toward the ball's height — always just short.
+        keeperReachRatio: (entryH + 0.06).clamp(0.05, 1.0),
+      );
+    }
     ball
       ..owner = null
       ..vel = Vec2.zero()
@@ -3404,6 +3445,10 @@ class MatchEngine {
     required List<String> options,
     required void Function(String decision) resolve,
   }) {
+    // Only goal reviews carry a front-camera snapshot.
+    if (category != 'goal') {
+      goalVarView = null;
+    }
     final reviewTimelineEvent = _recordTimelineEvent(
       kind: 'var',
       title: title,
@@ -3444,6 +3489,7 @@ class MatchEngine {
     varReviewActive = false;
     varReason = null;
     varReviewCategory = null;
+    goalVarView = null;
     varRecommendedDecision = null;
     varDecisionOptions = const [];
     _varDecisionResolver = null;
