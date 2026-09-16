@@ -11,7 +11,6 @@ import '../enums/team_id.dart';
 import '../math/vec2.dart';
 import '../models/ball_game.dart';
 import '../models/formation.dart';
-import '../models/goal_var_view.dart';
 import '../models/match_event.dart';
 import '../models/player_game.dart';
 import '../models/player_profile.dart';
@@ -130,16 +129,6 @@ class MatchEngine {
   bool varReviewActive = false;
   String? varReason;
   String? varReviewCategory;
-
-  /// Frozen goal snapshot driving the VAR split-screen front cameras
-  /// (مطلب: شاشة الفار المقسومة لنصفين، كل نصف مرمى فريق).
-  GoalVarView? goalVarView;
-
-  /// The last recorded replay frames before the ball crossed the line,
-  /// plus one synthetic crossing frame — drives the ANIMATED VAR goal
-  /// detail cameras (top view + front view) (مطلب: انميشن يعيد ما حدث).
-  List<ReplayFrame> goalReplayFrames = const [];
-  String? goalKeeperId;
   String? varRecommendedDecision;
   List<String> varDecisionOptions = const [];
   void Function(String decision)? _varDecisionResolver;
@@ -679,9 +668,6 @@ class MatchEngine {
         varReviewActive = false;
         varReason = null;
         varReviewCategory = null;
-        goalVarView = null;
-        goalReplayFrames = const [];
-        goalKeeperId = null;
         varRecommendedDecision = null;
         varDecisionOptions = const [];
         _varDecisionResolver = null;
@@ -1258,9 +1244,6 @@ class MatchEngine {
     varReviewActive = false;
     varReason = null;
     varReviewCategory = null;
-    goalVarView = null;
-    goalReplayFrames = const [];
-    goalKeeperId = null;
     currentOffside = null;
     callback?.call();
   }
@@ -2803,63 +2786,6 @@ class MatchEngine {
       ball.lastTouch!.profile.goals += 1;
       ball.lastTouch!.matchGoals += 1;
     }
-    // ---------- VAR front-camera snapshot (مطلب: الفار يشق الشاشة نصفين
-    // ويصور كل مرمى من الأمام: وين دخلت الكرة وكيف طار الحارس) ----------
-    {
-      final mouthHalf = GameConstants.goalPixelHeight / 2;
-      final centreY = GameConstants.virtualHeight / 2;
-      final keeper = conceding.goalkeeper;
-      final keeperOffset =
-          ((keeper.pos.y - centreY) / mouthHalf).clamp(-1.0, 1.0);
-      final keeperMotion = keeper.velocity.y != 0
-          ? keeper.velocity.y
-          : keeper.pos.y - keeper.homePos.y;
-      final entryH = ball.heightMeters /
-          GameConstants.crossbarMaxMeters;
-      goalVarView = GoalVarView(
-        concedingSide: conceding.side,
-        scoringTeamName: scoringTeam.name,
-        concedingTeamName: conceding.name,
-        scorerName: scorer,
-        minute: minute.ceil(),
-        entryRatio: ((netY - (centreY - mouthHalf)) /
-                GameConstants.goalPixelHeight)
-            .clamp(0.0, 1.0),
-        entryHeightRatio: entryH.clamp(0.0, 1.0),
-        keeperOffsetRatio: keeperOffset,
-        keeperDiveDir: keeperMotion > 4
-            ? 1
-            : keeperMotion < -4
-            ? -1
-            : 0,
-        // The keeper reaches toward the ball's height — always just short.
-        keeperReachRatio: (entryH + 0.06).clamp(0.05, 1.0),
-      );
-      // ---------- Animated VAR detail frames ----------
-      // Grab roughly the last 2.5 seconds of replay frames (the approach)
-      // and append a synthetic crossing frame so the animation ends exactly
-      // where the ball broke the line (مطلب: انميشن واضح يعيد الهدف).
-      final start = math.max(0, replayFrames.length - 32);
-      final grabbed = replayFrames.sublist(start);
-      final lastPlayers = grabbed.isEmpty
-          ? const <ReplayPlayerFrame>[]
-          : grabbed.last.players;
-      final frames = <ReplayFrame>[
-        ...grabbed,
-        ReplayFrame(
-          minute: minute,
-          ballX: ball.pos.x,
-          ballY: netY,
-          ballHeight: ball.heightMeters,
-          blueScore: blueTeam.score,
-          redScore: redTeam.score,
-          description: 'GOL',
-          players: lastPlayers,
-        ),
-      ];
-      goalReplayFrames = List.unmodifiable(frames);
-      goalKeeperId = conceding.goalkeeper.id;
-    }
     ball
       ..owner = null
       ..vel = Vec2.zero()
@@ -3479,12 +3405,6 @@ class MatchEngine {
     required List<String> options,
     required void Function(String decision) resolve,
   }) {
-    // Only goal reviews carry a front-camera snapshot.
-    if (category != 'goal') {
-      goalVarView = null;
-      goalReplayFrames = const [];
-      goalKeeperId = null;
-    }
     final reviewTimelineEvent = _recordTimelineEvent(
       kind: 'var',
       title: title,
@@ -3525,9 +3445,6 @@ class MatchEngine {
     varReviewActive = false;
     varReason = null;
     varReviewCategory = null;
-    goalVarView = null;
-    goalReplayFrames = const [];
-    goalKeeperId = null;
     varRecommendedDecision = null;
     varDecisionOptions = const [];
     _varDecisionResolver = null;
