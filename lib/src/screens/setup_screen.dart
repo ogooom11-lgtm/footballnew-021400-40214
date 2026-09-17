@@ -3088,31 +3088,69 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 
   Widget _lockedPenaltiesPage() {
-    return Center(
+    return Container(
+      decoration: _admCanvasDecoration,
+      alignment: Alignment.center,
       child: Container(
-        width: 480,
-        padding: const EdgeInsets.all(28),
-        decoration: _adminPanelDecoration(Colors.redAccent),
+        width: 460,
+        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 30),
+        decoration: BoxDecoration(
+          color: _admCard,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: _admRed.withValues(alpha: 0.45)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: 26,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.lock, size: 54, color: Colors.redAccent),
-            const SizedBox(height: 12),
+            Container(
+              width: 62,
+              height: 62,
+              decoration: BoxDecoration(
+                color: _admRed.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: _admRed.withValues(alpha: 0.5)),
+              ),
+              child: const Icon(
+                Icons.lock_rounded,
+                size: 30,
+                color: _admRed,
+              ),
+            ),
+            const SizedBox(height: 16),
             const Text(
               'CEZALAR sayfasi kilitli',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 8),
             const Text(
-              'Oyuncu mac cezalarini gormek ve degistirmek icin yonetici sifresi gerekir.',
+              'Oyuncu mac cezalarini gormek ve degistirmek icin yonetici '
+              'sifresi gerekir.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white70),
+              style: TextStyle(color: Colors.white60, fontSize: 12.5),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 20),
             FilledButton.icon(
               onPressed: () => _openAdminLogin(targetTab: 7),
-              icon: const Icon(Icons.password),
-              label: const Text('Sifre ile ac'),
+              style: FilledButton.styleFrom(
+                backgroundColor: _admRed,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 12,
+                ),
+              ),
+              icon: const Icon(Icons.password_rounded, size: 17),
+              label: const Text(
+                'Sifre ile ac',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
             ),
           ],
         ),
@@ -3418,297 +3456,217 @@ class _SetupScreenState extends State<SetupScreen> {
     await _save();
   }
 
-  Widget _adminPage(SavedGameData data) {
-    // «Ülkeler» and «Formalar» are visible with the regular admin password;
-    // only the player-settings tab still needs the kimo@ full access
-    // (مطلب: الدول والقمصان تظهر بكلمة المرور العادية).
-    final subTab = _adminSubTab == 2 && !data.adminFullAccess ? 0 : _adminSubTab;
-    const accent = Color(0xff00d084);
+  // =====================================================================
+  // Yönetim — YENİ TASARIM SİSTEMİ (مطلب: تصميم جديد كلياً لصفحات
+  // الإدارة: هادئ، مريح للعين، بلا ازدحام، أنيق وعصري).
+  // =====================================================================
+
+  static const Color _admCanvas = Color(0xff0b1120);
+  static const Color _admCard = Color(0xff131c31);
+  static const Color _admCardSoft = Color(0xff182238);
+  static const Color _admBorder = Color(0xff24345c);
+  static const Color _admAccent = Color(0xff6c8cff);
+  static const Color _admAccent2 = Color(0xff8b5cf6);
+  static const Color _admGold = Color(0xffffd34d);
+  static const Color _admGreen = Color(0xff2ee59d);
+  static const Color _admRed = Color(0xffff6b7a);
+
+  /// The admin screen canvas — a calm deep-navy gradient, very different
+  /// from the old green panels.
+  BoxDecoration get _admCanvasDecoration => const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xff0b1120), Color(0xff101a30)],
+        ),
+      );
+
+  /// Soft raised card used everywhere in the admin pages.
+  Widget _admCard({
+    required Widget child,
+    EdgeInsetsGeometry padding = const EdgeInsets.all(14),
+    Color accent = _admBorder,
+    double borderAlpha = 1.0,
+  }) {
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: _admCard,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: accent.withValues(alpha: borderAlpha)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.22),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  /// Unified page header: gradient icon chip, title, subtitle and
+  /// optional trailing actions — every admin tab starts with this so the
+  /// pages feel consistent and uncluttered.
+  Widget _admPageHeader({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    Color accent = _admAccent,
+    List<Widget> actions = const [],
+  }) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // ---------------- Sidebar ------------------------------------
         Container(
-          width: 240,
-          padding: const EdgeInsets.all(14),
-          decoration: _adminPanelDecoration(accent),
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [accent, accent.withValues(alpha: 0.45)],
+            ),
+            borderRadius: BorderRadius.circular(13),
+            boxShadow: [
+              BoxShadow(
+                color: accent.withValues(alpha: 0.3),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Icon(icon, color: Colors.white, size: 23),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          accent.withValues(alpha: 0.9),
-                          accent.withValues(alpha: 0.42),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: accent.withValues(alpha: 0.28),
-                          blurRadius: 10,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.admin_panel_settings,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'YONETIM',
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1.4,
-                          ),
-                        ),
-                        Text(
-                          'Kontrol merkezi',
-                          style: TextStyle(
-                            color: Colors.white54,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              if (data.adminFullAccess) ...[
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xffffd34d).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(9),
-                    border: Border.all(
-                      color: const Color(0xffffd34d).withValues(alpha: 0.5),
-                    ),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.verified, size: 13, color: Color(0xffffd34d)),
-                      SizedBox(width: 5),
-                      Expanded(
-                        child: Text(
-                          'Gelismis erisim (kimo@)',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xfff5d67b),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: 14),
-              _adminNavItem(
-                icon: Icons.account_circle,
-                label: 'Hesaplar',
-                count: data.accounts.length,
-                selected: subTab == 0,
-                accent: accent,
-                onTap: () => setState(() => _adminSubTab = 0),
-              ),
-              _adminNavItem(
-                icon: Icons.shield_outlined,
-                label: 'Takimlar',
-                count: data.teams.where((t) => !t.isDeleted).length,
-                selected: subTab == 1,
-                accent: accent,
-                onTap: () => setState(() => _adminSubTab = 1),
-              ),
-              _adminNavItem(
-                icon: Icons.swap_horiz,
-                label: 'Transferler',
-                count: data.pendingTransfers.length,
-                badgeHot: data.pendingTransfers.isNotEmpty,
-                selected: subTab == 3,
-                accent: accent,
-                onTap: () => setState(() => _adminSubTab = 3),
-              ),
-              if (data.adminFullAccess)
-                _adminNavItem(
-                  icon: Icons.tune,
-                  label: 'Oyuncu ayarlari',
-                  count: data.players.length,
-                  selected: subTab == 2,
-                  accent: accent,
-                  onTap: () => setState(() => _adminSubTab = 2),
-                ),
-              // Ülkeler ve Formalar normal yonetici sifresiyle acilir.
-              _adminNavItem(
-                icon: Icons.public,
-                label: 'Ülkeler',
-                count: _distinctCountryCount(data),
-                selected: subTab == 4,
-                accent: accent,
-                onTap: () => setState(() => _adminSubTab = 4),
-              ),
-              _adminNavItem(
-                icon: Icons.sports_soccer,
-                label: 'Formalar',
-                count: data.teams.where((t) => !t.isDeleted).length,
-                selected: subTab == 5,
-                accent: accent,
-                onTap: () => setState(() => _adminSubTab = 5),
-              ),
-              _adminNavItem(
-                icon: Icons.manage_accounts,
-                label: 'Oyuncu yonetimi',
-                count: data.players.length,
-                selected: subTab == 6,
-                accent: accent,
-                onTap: () => setState(() => _adminSubTab = 6),
-              ),
-              const SizedBox(height: 16),
-              const Padding(
-                padding: EdgeInsets.only(left: 4, bottom: 6),
-                child: Text(
-                  'HIZLI ISLEMLER',
-                  style: TextStyle(
-                    color: Colors.white38,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.2,
-                  ),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.2,
                 ),
               ),
-              PopupMenuButton<String>(
-                tooltip: 'Piyasa degerlerini guncelle',
-                onSelected: (value) =>
-                    _updateMarketValues(strong: value == 'strong'),
-                itemBuilder: (context) => const [
-                  PopupMenuItem(
-                    value: 'light',
-                    child: ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.trending_up),
-                      title: Text('Hafif guncelleme'),
-                      subtitle: Text('Son maclara gore kucuk degisimler'),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'strong',
-                    child: ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.trending_up),
-                      title: Text('Guclu guncelleme'),
-                      subtitle: Text('Kariyere gore buyuk degisimler'),
-                    ),
-                  ),
-                ],
-                child: _adminQuickTile(
-                  icon: Icons.attach_money,
-                  label: 'Piyasa degerlerini guncelle',
-                  accent: accent,
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  color: Colors.white54,
+                  height: 1.25,
                 ),
-              ),
-              _adminQuickTile(
-                icon: Icons.password,
-                label: 'Yonetici sifresini degistir',
-                accent: accent,
-                onTap: _changeAdminPassword,
-              ),
-              _adminQuickTile(
-                icon: Icons.delete_sweep_outlined,
-                label: 'Mac arsivini temizle (${data.matchArchive.length})',
-                accent: const Color(0xffffd34d),
-                onTap: data.matchArchive.isEmpty ? null : _adminClearArchive,
-              ),
-              // إعادة ضبط البيانات محذوفة نهائياً من الإدارة
-              // (مطلب صريح) — يبقى القفل وتنظيف الأرشيف فقط.
-              const Spacer(),
-              _adminQuickTile(
-                icon: Icons.lock_outline,
-                label: 'Sayfayi kilitle',
-                accent: accent,
-                onTap: _lockAdmin,
               ),
             ],
           ),
         ),
-        const SizedBox(width: 12),
-        // ---------------- Content ------------------------------------
-        Expanded(
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 260),
-            switchInCurve: Curves.easeOutCubic,
-            transitionBuilder: (child, animation) {
-              return FadeTransition(
-                opacity: animation,
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0, 0.02),
-                    end: Offset.zero,
-                  ).animate(animation),
-                  child: child,
-                ),
-              );
-            },
-            child: KeyedSubtree(
-              key: ValueKey('admin-subtab-$subTab'),
-              child: switch (subTab) {
-                1 => _adminTeamsTab(data),
-                2 when data.adminFullAccess => _adminPlayersTab(data),
-                3 => _adminTransfersTab(data),
-                4 => _adminCountriesTab(data),
-                5 => _adminKitsTab(data),
-                6 => _adminManagePlayersTab(data),
-                _ => _adminAccountsTab(data),
-              },
-            ),
-          ),
-        ),
+        ...actions,
       ],
     );
   }
 
-  /// Sidebar navigation item with an icon, label and a count badge.
-  Widget _adminNavItem({
+  /// Page scaffold: header + scrollable/stretched body inside the soft
+  /// card system.
+  Widget _admScaffold({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Widget body,
+    Color accent = _admAccent,
+    List<Widget> actions = const [],
+  }) {
+    return Container(
+      decoration: _admCanvasDecoration,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _admPageHeader(
+            icon: icon,
+            title: title,
+            subtitle: subtitle,
+            accent: accent,
+            actions: actions,
+          ),
+          const SizedBox(height: 14),
+          Expanded(child: body),
+        ],
+      ),
+    );
+  }
+
+  /// Consistent rounded search field for every admin page.
+  Widget _admSearchField({
+    required String hint,
+    required ValueChanged<String> onChanged,
+  }) {
+    return TextField(
+      onChanged: onChanged,
+      style: const TextStyle(fontSize: 13),
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: hint,
+        hintStyle: const TextStyle(color: Colors.white30),
+        prefixIcon: const Icon(
+          Icons.search_rounded,
+          size: 18,
+          color: Colors.white38,
+        ),
+        filled: true,
+        fillColor: _admCardSoft,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(11),
+          borderSide: BorderSide(color: _admBorder.withValues(alpha: 0.8)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(11),
+          borderSide: BorderSide(color: _admBorder.withValues(alpha: 0.8)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(11),
+          borderSide: const BorderSide(color: _admAccent),
+        ),
+      ),
+    );
+  }
+
+  /// Pill-style sidebar entry (مطلب: تصميم مريح بلا زحمة).
+  Widget _admNavItem({
     required IconData icon,
     required String label,
-    required int count,
     required bool selected,
-    required Color accent,
     required VoidCallback onTap,
-    bool badgeHot = false,
+    int? count,
+    Color accent = _admAccent,
+    bool hot = false,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 5),
+      padding: const EdgeInsets.only(bottom: 4),
       child: Material(
-        color: selected
-            ? accent.withValues(alpha: 0.16)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(11),
+        color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(11),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
             decoration: BoxDecoration(
+              gradient: selected
+                  ? LinearGradient(
+                      colors: [
+                        accent.withValues(alpha: 0.30),
+                        accent.withValues(alpha: 0.10),
+                      ],
+                    )
+                  : null,
+              color: selected ? null : Colors.white.withValues(alpha: 0.02),
               borderRadius: BorderRadius.circular(11),
               border: Border.all(
                 color: selected
@@ -3718,49 +3676,43 @@ class _SetupScreenState extends State<SetupScreen> {
             ),
             child: Row(
               children: [
-                Container(
-                  width: 3,
-                  height: 22,
-                  margin: const EdgeInsets.only(right: 9),
-                  decoration: BoxDecoration(
-                    color: selected ? accent : Colors.transparent,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
                 Icon(
                   icon,
-                  size: 19,
-                  color: selected ? accent : Colors.white60,
+                  size: 17,
+                  color: selected ? Colors.white : Colors.white54,
                 ),
                 const SizedBox(width: 9),
                 Expanded(
                   child: Text(
                     label,
                     style: TextStyle(
-                      fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
-                      fontSize: 13,
-                      color: selected ? Colors.white : Colors.white70,
+                      fontSize: 12.5,
+                      fontWeight:
+                          selected ? FontWeight.w900 : FontWeight.w600,
+                      color: selected ? Colors.white : Colors.white60,
                     ),
                   ),
                 ),
-                if (count > 0)
+                if (count != null)
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 7,
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: badgeHot
-                          ? const Color(0xffff9f43).withValues(alpha: 0.85)
-                          : Colors.white.withValues(alpha: 0.09),
-                      borderRadius: BorderRadius.circular(9),
+                      color: hot
+                          ? _admRed.withValues(alpha: 0.22)
+                          : (selected
+                              ? Colors.white.withValues(alpha: 0.16)
+                              : Colors.white.withValues(alpha: 0.07)),
+                      borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
                       '$count',
                       style: TextStyle(
-                        fontSize: 10.5,
+                        fontSize: 10,
                         fontWeight: FontWeight.w900,
-                        color: badgeHot ? Colors.black : Colors.white70,
+                        color: hot ? _admRed : Colors.white70,
                       ),
                     ),
                   ),
@@ -3772,50 +3724,66 @@ class _SetupScreenState extends State<SetupScreen> {
     );
   }
 
-  /// Compact quick-action row of the admin sidebar. Works both as a plain
-  /// button ([onTap]) and as a PopupMenuButton child (no onTap).
-  Widget _adminQuickTile({
-    required IconData icon,
-    required String label,
-    required Color accent,
-    VoidCallback? onTap,
-  }) {
-    final content = Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 5),
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 17, color: accent),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          const Icon(Icons.chevron_right, size: 16, color: Colors.white38),
-        ],
+  /// Tiny caption above nav groups.
+  Widget _admNavCaption(String text) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 12, 0, 6),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white30,
+          fontSize: 9.5,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 1.6,
+        ),
       ),
     );
-    if (onTap == null) {
-      // PopupMenuButton provides its own ink.
-      return content;
-    }
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: content,
+  }
+
+  /// Compact bottom action tile for the sidebar.
+  Widget _admSideAction({
+    required IconData icon,
+    required String label,
+    required VoidCallback? onTap,
+    Color accent = _admAccent,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.03),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.06),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, size: 15, color: accent.withValues(alpha: 0.9)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white70,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -3838,10 +3806,10 @@ class _SetupScreenState extends State<SetupScreen> {
     return showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xff0e1c17),
+        backgroundColor: _admCard,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+          side: const BorderSide(color: _admBorder),
         ),
         title: Text(title, style: const TextStyle(fontSize: 17)),
         content: Text(
@@ -3856,8 +3824,8 @@ class _SetupScreenState extends State<SetupScreen> {
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xff00d084),
-              foregroundColor: const Color(0xff00130c),
+              backgroundColor: _admAccent,
+              foregroundColor: Colors.white,
             ),
             child: const Text('Onayla'),
           ),
@@ -3866,49 +3834,287 @@ class _SetupScreenState extends State<SetupScreen> {
     );
   }
 
-  /// Shared header row for the admin sub-tabs: an accent icon chip, a bold
-  /// title and a muted one-line description.
-  Widget _adminSectionHeader({
-    required IconData icon,
-    required Color accent,
-    required String title,
-    required String subtitle,
-  }) {
-    return Row(
-      children: [
-        Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            color: accent.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(9),
-            border: Border.all(color: accent.withValues(alpha: 0.40)),
-          ),
-          child: Icon(icon, size: 18, color: accent),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w900,
+  Widget _adminPage(SavedGameData data) {
+    // «Ülkeler» and «Formalar» are visible with the regular admin password;
+    // only the player-settings tab still needs the kimo@ full access
+    // (مطلب: الدول والقمصان تظهر بكلمة المرور العادية).
+    final subTab = _adminSubTab == 2 && !data.adminFullAccess ? 0 : _adminSubTab;
+    return Container(
+      decoration: _admCanvasDecoration,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ---------------- Sidebar (مطلب: تصميم جديد مريح) ------------
+          Container(
+            width: 232,
+            padding: const EdgeInsets.fromLTRB(12, 16, 12, 14),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.25),
+              border: Border(
+                right: BorderSide(
+                  color: _admBorder.withValues(alpha: 0.55),
                 ),
               ),
-              Text(
-                subtitle,
-                style: const TextStyle(
-                  color: Colors.white54,
-                  fontSize: 11.5,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // ---------- Brand ----------
+                Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [_admAccent, _admAccent2],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _admAccent.withValues(alpha: 0.35),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.space_dashboard_rounded,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Yonetim Merkezi',
+                            style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          Text(
+                            'Bomban Futbol',
+                            style: TextStyle(
+                              color: Colors.white38,
+                              fontSize: 10.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+                if (data.adminFullAccess) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          _admGold.withValues(alpha: 0.16),
+                          _admGold.withValues(alpha: 0.05),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: _admGold.withValues(alpha: 0.45),
+                      ),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(
+                          Icons.workspace_premium_rounded,
+                          size: 13,
+                          color: _admGold,
+                        ),
+                        SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Gelismis erisim — kimo@',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xfff5d67b),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 6),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _admNavCaption('GENEL'),
+                        _admNavItem(
+                          icon: Icons.groups_rounded,
+                          label: 'Hesaplar',
+                          count: data.accounts.length,
+                          selected: subTab == 0,
+                          accent: _admAccent,
+                          onTap: () => setState(() => _adminSubTab = 0),
+                        ),
+                        _admNavItem(
+                          icon: Icons.shield_rounded,
+                          label: 'Takimlar',
+                          count: data.teams.where((t) => !t.isDeleted).length,
+                          selected: subTab == 1,
+                          accent: _admGold,
+                          onTap: () => setState(() => _adminSubTab = 1),
+                        ),
+                        _admNavItem(
+                          icon: Icons.manage_accounts_rounded,
+                          label: 'Oyuncu yonetimi',
+                          count: data.players.length,
+                          selected: subTab == 6,
+                          accent: _admGreen,
+                          onTap: () => setState(() => _adminSubTab = 6),
+                        ),
+                        _admNavItem(
+                          icon: Icons.swap_horiz_rounded,
+                          label: 'Transferler',
+                          count: data.pendingTransfers.length,
+                          hot: data.pendingTransfers.isNotEmpty,
+                          selected: subTab == 3,
+                          accent: _admRed,
+                          onTap: () => setState(() => _adminSubTab = 3),
+                        ),
+                        _admNavCaption('KATALOGLAR'),
+                        _admNavItem(
+                          icon: Icons.public_rounded,
+                          label: 'Ülkeler',
+                          count: _distinctCountryCount(data),
+                          selected: subTab == 4,
+                          accent: const Color(0xff4dd0e1),
+                          onTap: () => setState(() => _adminSubTab = 4),
+                        ),
+                        _admNavItem(
+                          icon: Icons.sports_soccer_rounded,
+                          label: 'Formalar',
+                          count: data.teams.where((t) => !t.isDeleted).length,
+                          selected: subTab == 5,
+                          accent: const Color(0xffff8a65),
+                          onTap: () => setState(() => _adminSubTab = 5),
+                        ),
+                        if (data.adminFullAccess) ...[
+                          _admNavCaption('GIZLI ERISIM'),
+                          _admNavItem(
+                            icon: Icons.tune_rounded,
+                            label: 'Oyuncu ayarlari',
+                            count: data.players.length,
+                            selected: subTab == 2,
+                            accent: _admGold,
+                            onTap: () => setState(() => _adminSubTab = 2),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                // ---------- Quick actions (compact, calm) ----------
+                _admNavCaption('HIZLI ISLEMLER'),
+                PopupMenuButton<String>(
+                  tooltip: 'Piyasa degerlerini guncelle',
+                  onSelected: (value) =>
+                      _updateMarketValues(strong: value == 'strong'),
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(
+                      value: 'light',
+                      child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.trending_up),
+                        title: Text('Hafif guncelleme'),
+                        subtitle:
+                            Text('Son maclara gore kucuk degisimler'),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'strong',
+                      child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.trending_up),
+                        title: Text('Guclu guncelleme'),
+                        subtitle: Text('Kariyere gore buyuk degisimler'),
+                      ),
+                    ),
+                  ],
+                  child: _admSideAction(
+                    icon: Icons.sync_rounded,
+                    label: 'Piyasa degerlerini guncelle',
+                    accent: _admGreen,
+                    onTap: null,
+                  ),
+                ),
+                _admSideAction(
+                  icon: Icons.password_rounded,
+                  label: 'Yonetici sifresini degistir',
+                  accent: _admAccent,
+                  onTap: _changeAdminPassword,
+                ),
+                _admSideAction(
+                  icon: Icons.delete_sweep_rounded,
+                  label: 'Mac arsivini temizle (${data.matchArchive.length})',
+                  accent: _admGold,
+                  onTap:
+                      data.matchArchive.isEmpty ? null : _adminClearArchive,
+                ),
+                const SizedBox(height: 6),
+                _admSideAction(
+                  icon: Icons.lock_outline_rounded,
+                  label: 'Sayfayi kilitle',
+                  accent: _admRed,
+                  onTap: _lockAdmin,
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
+          // ---------------- Content ------------------------------------
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 240),
+              switchInCurve: Curves.easeOutCubic,
+              transitionBuilder: (child, animation) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0, 0.015),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: child,
+                  ),
+                );
+              },
+              child: KeyedSubtree(
+                key: ValueKey('admin-subtab-$subTab'),
+                child: switch (subTab) {
+                  1 => _adminTeamsTab(data),
+                  2 when data.adminFullAccess => _adminPlayersTab(data),
+                  3 => _adminTransfersTab(data),
+                  4 => _adminCountriesTab(data),
+                  5 => _adminKitsTab(data),
+                  6 => _adminManagePlayersTab(data),
+                  _ => _adminAccountsTab(data),
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -3921,20 +4127,16 @@ class _SetupScreenState extends State<SetupScreen> {
               account.username.toLowerCase().contains(query),
         )
         .toList();
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: _adminPanelDecoration(const Color(0xff00d084)),
-      child: Column(
+    return _admScaffold(
+      icon: Icons.groups_rounded,
+      accent: _admAccent,
+      title: 'Hesaplar',
+      subtitle:
+          'Sifre unutulduysa buradan yeni sifre belirle. Hesap silinebilir.',
+      body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _adminSectionHeader(
-            icon: Icons.account_circle,
-            accent: const Color(0xff00d084),
-            title: 'Hesaplar',
-            subtitle:
-                'Sifre unutulduysa buradan yeni sifre belirle. Hesap silinebilir.',
-          ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 2),
           Row(
             children: [
               Expanded(
@@ -3951,8 +4153,8 @@ class _SetupScreenState extends State<SetupScreen> {
               FilledButton.icon(
                 onPressed: () => _adminCreateAccount(data),
                 style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xff00d084),
-                  foregroundColor: const Color(0xff00130c),
+                  backgroundColor: _admAccent,
+                  foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
                     vertical: 9,
@@ -3967,16 +4169,11 @@ class _SetupScreenState extends State<SetupScreen> {
             ],
           ),
           const SizedBox(height: 10),
-          TextField(
-            decoration: const InputDecoration(
-              prefixIcon: Icon(Icons.search),
-              labelText: 'Hesap ara',
-              isDense: true,
-            ),
+          _admSearchField(
+            hint: 'Hesap ara...',
             onChanged: (value) => setState(() => _accountSearch = value),
           ),
           const SizedBox(height: 10),
-          const Divider(height: 1),
           Expanded(
             child: accounts.isEmpty
                 ? const Center(
@@ -4009,13 +4206,12 @@ class _SetupScreenState extends State<SetupScreen> {
                           vertical: 9,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.035),
+                          color: _admCard,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: loggedIn
-                                ? const Color(0xff00d084)
-                                      .withValues(alpha: 0.45)
-                                : Colors.white.withValues(alpha: 0.08),
+                                ? _admGreen.withValues(alpha: 0.5)
+                                : _admBorder,
                           ),
                         ),
                         child: Row(
@@ -4198,38 +4394,23 @@ class _SetupScreenState extends State<SetupScreen> {
         )
         .toList()
       ..sort((a, b) => b.rating.compareTo(a.rating));
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: _adminPanelDecoration(const Color(0xffffd34d)),
-      child: Column(
+    return _admScaffold(
+      icon: Icons.shield_rounded,
+      accent: _admGold,
+      title: 'Takimlar',
+      subtitle:
+          'Takim olustur, duzenle ve sil — silmeden once mutlaka onay sorulur.',
+      body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _adminSectionHeader(
-            icon: Icons.shield_outlined,
-            accent: const Color(0xffffd34d),
-            title: 'Takimlar',
-            subtitle: 'Takim silmeden once uyari gosterilir.',
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            decoration: const InputDecoration(
-              prefixIcon: Icon(Icons.search),
-              labelText: 'Yonetimde takim ara',
-              isDense: true,
-            ),
+          _admSearchField(
+            hint: 'Takim ara...',
             onChanged: (value) => setState(() => _adminTeamSearch = value),
           ),
           const SizedBox(height: 10),
           // Quick team creation straight from the admin page.
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xffffd34d).withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: const Color(0xffffd34d).withValues(alpha: 0.25),
-              ),
-            ),
+          _admCard(
+            accent: _admGold.withValues(alpha: 0.4),
             child: Row(
               children: [
                 const Icon(
@@ -4271,10 +4452,11 @@ class _SetupScreenState extends State<SetupScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          const Divider(height: 1),
           Expanded(
-            child: ListView.builder(
+            child: ListView.separated(
+              padding: const EdgeInsets.only(bottom: 14),
               itemCount: teams.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 6),
               itemBuilder: (context, index) =>
                   _adminTeamCard(data, teams[index]),
             ),
@@ -4291,21 +4473,16 @@ class _SetupScreenState extends State<SetupScreen> {
   /// (player is added to the team) or rejects the request.
   Widget _adminTransfersTab(SavedGameData data) {
     final pending = data.pendingTransfers;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: _adminPanelDecoration(const Color(0xffffd34d)),
-      child: Column(
+    return _admScaffold(
+      icon: Icons.swap_horiz_rounded,
+      accent: _admRed,
+      title: 'Transfer Talepleri',
+      subtitle:
+          'Serbest oyuncular icin gelen transfer isteklerini onayla veya reddet.',
+      body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _adminSectionHeader(
-            icon: Icons.swap_horiz,
-            accent: const Color(0xffff9f43),
-            title: 'Transfer Talepleri',
-            subtitle:
-                'Serbest oyuncular icin gelen transfer isteklerini onayla veya reddet.',
-          ),
-          const SizedBox(height: 10),
-          const Divider(height: 1),
+          const SizedBox(height: 2),
           Expanded(
             child: pending.isEmpty
                 ? const Center(
@@ -4315,8 +4492,9 @@ class _SetupScreenState extends State<SetupScreen> {
                     ),
                   )
                 : ListView.separated(
+                    padding: const EdgeInsets.only(bottom: 14),
                     itemCount: pending.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    separatorBuilder: (_, __) => const SizedBox(height: 6),
                     itemBuilder: (context, index) {
                       final request = pending[index];
                       final player = data.players
@@ -4343,8 +4521,13 @@ class _SetupScreenState extends State<SetupScreen> {
                             ).toString().split('.').first;
                       return Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
+                          horizontal: 12,
                           vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _admCard,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: _admBorder),
                         ),
                         child: Row(
                           children: [
@@ -4610,51 +4793,55 @@ class _SetupScreenState extends State<SetupScreen> {
           (country) => query.isEmpty || country.toLowerCase().contains(query),
         )
         .toList();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _adminSectionHeader(
-          icon: Icons.public,
-          accent: const Color(0xff00d084),
-          title: 'Ülkeler',
-          subtitle:
-              'Her ulke takimlarini ve oyuncularini gosterir — oyuncu baska '
-              'takimda olsa bile listelenir',
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                onChanged: (value) => setState(() => _countrySearch = value),
-                decoration: const InputDecoration(
-                  isDense: true,
-                  prefixIcon: Icon(Icons.search, size: 18),
-                  hintText: 'Ulke ara...',
-                  border: OutlineInputBorder(),
+    return _admScaffold(
+      icon: Icons.public_rounded,
+      accent: const Color(0xff4dd0e1),
+      title: 'Ülkeler',
+      subtitle:
+          'Ulke ekle, adlandir ve sil — takimlar ve oyuncular buradaki '
+          'katalogdan ulke alir.',
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _admSearchField(
+                  hint: 'Ulke ara...',
+                  onChanged: (value) =>
+                      setState(() => _countrySearch = value),
                 ),
               ),
-            ),
-            const SizedBox(width: 10),
-            FilledButton.icon(
-              onPressed: () => _addCountryNew(data),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xff00d084),
-                foregroundColor: const Color(0xff00130c),
+              const SizedBox(width: 10),
+              FilledButton.icon(
+                onPressed: () => _addCountryNew(data),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xff4dd0e1),
+                  foregroundColor: const Color(0xff03212a),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 11,
+                  ),
+                ),
+                icon: const Icon(Icons.add_rounded, size: 17),
+                label: const Text(
+                  'Ülke ekle',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900),
+                ),
               ),
-              icon: const Icon(Icons.add, size: 17),
-              label: const Text('Ülke ekle', style: TextStyle(fontSize: 12)),
-            ),
-            const SizedBox(width: 10),
+              const SizedBox(width: 10),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
               decoration: BoxDecoration(
-                color: const Color(0xff00d084).withValues(alpha: 0.12),
+                color: const Color(0xff4dd0e1).withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(9),
+                border: Border.all(
+                  color: const Color(0xff4dd0e1).withValues(alpha: 0.35),
+                ),
               ),
               child: Text(
                 '${countries.length} ulke • ${data.players.length} oyuncu',
-                style: const TextStyle(fontSize: 11, color: Color(0xff9ff5d2)),
+                style: const TextStyle(fontSize: 11, color: Color(0xff9ee8f5)),
               ),
             ),
             const SizedBox(width: 10),
@@ -4728,7 +4915,16 @@ class _SetupScreenState extends State<SetupScreen> {
                     final country = visible[index];
                     final players = playersByCountry[country] ?? const [];
                     final teams = teamsByCountry[country] ?? const [];
-                    return ExpansionTile(
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: _admCard,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _admBorder),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: ExpansionTile(
+                      shape: const Border(),
+                      collapsedShape: const Border(),
                       initiallyExpanded: country == 'غير محدد',
                       tilePadding: const EdgeInsets.symmetric(horizontal: 12),
                       // Ülke islemleri: yeniden adlandir ve sil
@@ -4909,11 +5105,13 @@ class _SetupScreenState extends State<SetupScreen> {
                           ),
                         ),
                       ],
+                      ),
                     );
                   },
                 ),
-        ),
-      ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -5102,8 +5300,8 @@ class _SetupScreenState extends State<SetupScreen> {
                 Navigator.of(dialogContext).pop();
               },
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xff00d084),
-                foregroundColor: const Color(0xff00130c),
+                backgroundColor: _admAccent,
+                foregroundColor: Colors.white,
               ),
               child: const Text('Kaydet'),
             ),
@@ -5136,17 +5334,17 @@ class _SetupScreenState extends State<SetupScreen> {
         .cast<SavedTeamProfile?>()
         .firstWhere((t) => true, orElse: () => null) ??
         (teams.isEmpty ? null : teams.first);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _adminSectionHeader(
-          icon: Icons.sports_soccer,
-          accent: const Color(0xff00d084),
-          title: 'Formalar — قمصان الفرق',
-          subtitle:
-              'Her takim icin forma ekle, duzenle, sil veya aktif yap',
-        ),
-        const SizedBox(height: 10),
+    return _admScaffold(
+      icon: Icons.sports_soccer_rounded,
+      accent: const Color(0xffff8a65),
+      title: 'Formalar — قمصان الفرق',
+      subtitle:
+          'Her takim icin forma ekle, duzenle, sil veya aktif yap — '
+          'renk secimi tamamen serbest.',
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 2),
         Row(
           children: [
             Expanded(
@@ -5173,8 +5371,8 @@ class _SetupScreenState extends State<SetupScreen> {
               FilledButton.icon(
                 onPressed: () => _editKitDialog(team, null),
                 style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xff00d084),
-                  foregroundColor: const Color(0xff00130c),
+                  backgroundColor: _admAccent,
+                  foregroundColor: Colors.white,
                 ),
                 icon: const Icon(Icons.add, size: 17),
                 label: const Text('Yeni forma ekle'),
@@ -5205,8 +5403,9 @@ class _SetupScreenState extends State<SetupScreen> {
                     index,
                   ),
                 ),
-        ),
-      ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -5218,13 +5417,13 @@ class _SetupScreenState extends State<SetupScreen> {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: const Color(0xff0d2119),
+        color: _admCard,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: active
-              ? const Color(0xffffd34d).withValues(alpha: 0.8)
-              : Colors.white.withValues(alpha: 0.08),
-          width: active ? 1.8 : 1,
+              ? _admGold.withValues(alpha: 0.85)
+              : _admBorder,
+          width: active ? 1.6 : 1,
         ),
       ),
       child: Column(
@@ -5483,8 +5682,8 @@ class _SetupScreenState extends State<SetupScreen> {
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xff00d084),
-                foregroundColor: const Color(0xff00130c),
+                backgroundColor: _admAccent,
+                foregroundColor: Colors.white,
               ),
               child: const Text('Kaydet'),
             ),
@@ -5695,8 +5894,8 @@ class _SetupScreenState extends State<SetupScreen> {
               FilledButton(
                 onPressed: () => Navigator.of(dialogContext).pop(fromHsv()),
                 style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xff00d084),
-                  foregroundColor: const Color(0xff00130c),
+                  backgroundColor: _admAccent,
+                  foregroundColor: Colors.white,
                 ),
                 child: const Text('Tamam'),
               ),
@@ -5746,31 +5945,25 @@ class _SetupScreenState extends State<SetupScreen> {
           _cleanPlayerName(a.name).compareTo(_cleanPlayerName(b.name)));
     final selectedVisible =
         players.where((p) => _manageSelectedIds.contains(p.id)).length;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _adminSectionHeader(
-          icon: Icons.manage_accounts,
-          accent: const Color(0xff00d084),
-          title: 'Oyuncu yönetimi — إدارة اللاعبين',
-          subtitle:
-              'Isim, ulke ve pozisyon duzenle — coklu secim ile toplu ulke '
-              'atama veya silme',
-        ),
-        const SizedBox(height: 10),
+    return _admScaffold(
+      icon: Icons.manage_accounts_rounded,
+      accent: _admAccent2,
+      title: 'Oyuncu yönetimi — إدارة اللاعبين',
+      subtitle:
+          'Isim, ulke ve pozisyon duzenle — coklu secim ile toplu ulke '
+          'atama veya silme.',
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 2),
         // ---------- Search + filter + add/import ----------
         Row(
           children: [
             Expanded(
-              child: TextField(
+              child: _admSearchField(
+                hint: 'Oyuncu ara...',
                 onChanged: (value) =>
                     setState(() => _managePlayerSearch = value),
-                decoration: const InputDecoration(
-                  isDense: true,
-                  prefixIcon: Icon(Icons.search, size: 18),
-                  hintText: 'Oyuncu ara...',
-                  border: OutlineInputBorder(),
-                ),
               ),
             ),
             const SizedBox(width: 8),
@@ -5932,8 +6125,9 @@ class _SetupScreenState extends State<SetupScreen> {
                   itemBuilder: (context, index) =>
                       _managePlayerRow(data, players[index]),
                 ),
-        ),
-      ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -5946,13 +6140,13 @@ class _SetupScreenState extends State<SetupScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: selected
-            ? const Color(0xff00d084).withValues(alpha: 0.08)
-            : Colors.white.withValues(alpha: 0.03),
+            ? _admAccent2.withValues(alpha: 0.12)
+            : _admCard.withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: selected
-              ? const Color(0xff00d084).withValues(alpha: 0.55)
-              : Colors.white.withValues(alpha: 0.07),
+              ? _admAccent2.withValues(alpha: 0.6)
+              : _admBorder,
         ),
       ),
       child: Row(
@@ -6136,8 +6330,8 @@ class _SetupScreenState extends State<SetupScreen> {
             onPressed: () =>
                 Navigator.of(dialogContext).pop(controller.text),
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xff00d084),
-              foregroundColor: const Color(0xff00130c),
+              backgroundColor: _admAccent,
+              foregroundColor: Colors.white,
             ),
             child: const Text('Kaydet'),
           ),
@@ -6586,8 +6780,8 @@ class _SetupScreenState extends State<SetupScreen> {
               onPressed: () =>
                   Navigator.of(dialogContext).pop({...chosen}),
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xff00d084),
-                foregroundColor: const Color(0xff00130c),
+                backgroundColor: _admAccent,
+                foregroundColor: Colors.white,
               ),
               child: const Text('Tamam (Seçilenler)'),
             ),
@@ -6707,8 +6901,8 @@ class _SetupScreenState extends State<SetupScreen> {
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xff00d084),
-              foregroundColor: const Color(0xff00130c),
+              backgroundColor: _admAccent,
+              foregroundColor: Colors.white,
             ),
             child: const Text('Ben seçeceğim'),
           ),
@@ -6731,40 +6925,29 @@ class _SetupScreenState extends State<SetupScreen> {
         )
         .toList()
       ..sort((a, b) => b.effectiveOverall.compareTo(a.effectiveOverall));
-    return Container(
-      decoration: _adminPanelDecoration(const Color(0xff00d084)),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _adminSectionHeader(
-                    icon: Icons.tune,
-                    accent: const Color(0xff7ab8ff),
-                    title: 'Oyuncu degerleri ve ayarlari',
-                    subtitle:
-                        'Gizli bolum — yalnizca kimo@ sifresiyle acilir.',
-                  ),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => _openTeamPlayers(''),
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(
-                      color: Colors.white.withValues(alpha: 0.22),
-                    ),
-                  ),
-                  icon: const Icon(Icons.groups, size: 17),
-                  label: const Text('Takim oyunculari sayfasi'),
-                ),
-              ],
-            ),
+    return _admScaffold(
+      icon: Icons.tune_rounded,
+      accent: _admAccent,
+      title: 'Oyuncu degerleri ve ayarlari',
+      subtitle:
+          'Gizli bolum — yalnizca kimo@ erisimi olan yonetici girer.',
+      actions: [
+        OutlinedButton.icon(
+          onPressed: () => _openTeamPlayers(''),
+          style: OutlinedButton.styleFrom(
+            side: BorderSide(color: Colors.white.withValues(alpha: 0.22)),
           ),
+          icon: const Icon(Icons.groups, size: 17),
+          label: const Text('Takim oyunculari sayfasi'),
+        ),
+      ],
+      body: Column(
+        children: [
+          const SizedBox(height: 2),
           // ---------- Team quality roller (kimo@ مطلب: فريق كامل ممتاز
           // أو جيد أو متوسط أو سيئ) ----------
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
+            padding: const EdgeInsets.fromLTRB(0, 0, 0, 4),
             child: Container(
               padding: const EdgeInsets.symmetric(
                 horizontal: 10,
@@ -6845,22 +7028,20 @@ class _SetupScreenState extends State<SetupScreen> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
-            child: TextField(
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search),
-                labelText: 'Yonetimde oyuncu ara',
-                isDense: true,
-              ),
+            padding: const EdgeInsets.fromLTRB(0, 6, 0, 10),
+            child: _admSearchField(
+              hint: 'Oyuncu ara...',
               onChanged: (value) =>
                   setState(() => _adminPlayerSearch = value),
             ),
           ),
           _adminBulkToolbar(data),
-          const Divider(height: 1),
+          const SizedBox(height: 4),
           Expanded(
-            child: ListView.builder(
+            child: ListView.separated(
+              padding: const EdgeInsets.only(bottom: 14),
               itemCount: players.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 6),
               itemBuilder: (context, index) =>
                   _adminPlayerCard(players[index]),
             ),
@@ -6876,7 +7057,7 @@ class _SetupScreenState extends State<SetupScreen> {
   Widget _adminBulkToolbar(SavedGameData data) {
     final hasSelection = _adminSelectedPlayerIds.isNotEmpty;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+      padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -7109,8 +7290,8 @@ class _SetupScreenState extends State<SetupScreen> {
                               ? null
                               : () => _applyBulkAttribute(1),
                           style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xff00d084),
-                            foregroundColor: const Color(0xff00130c),
+                            backgroundColor: _admAccent,
+                            foregroundColor: Colors.white,
                             minimumSize: const Size(0, 28),
                           ),
                           icon: const Icon(Icons.add, size: 15),
@@ -7190,8 +7371,8 @@ class _SetupScreenState extends State<SetupScreen> {
             onPressed: () =>
                 Navigator.of(dialogContext).pop(controller.text),
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xff00d084),
-              foregroundColor: const Color(0xff00130c),
+              backgroundColor: _admAccent,
+              foregroundColor: Colors.white,
             ),
             child: const Text('Tamam'),
           ),
@@ -7373,31 +7554,76 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 
   Widget _lockedAdminPage() {
-    return Center(
+    return Container(
+      decoration: _admCanvasDecoration,
+      alignment: Alignment.center,
       child: Container(
-        width: 480,
-        padding: const EdgeInsets.all(28),
-        decoration: _adminPanelDecoration(const Color(0xff00d084)),
+        width: 460,
+        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 30),
+        decoration: BoxDecoration(
+          color: _admCard,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: _admBorder),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: 26,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.lock, size: 54, color: Color(0xff00d084)),
-            const SizedBox(height: 12),
+            Container(
+              width: 62,
+              height: 62,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    _admAccent.withValues(alpha: 0.25),
+                    _admAccent2.withValues(alpha: 0.18),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: _admAccent.withValues(alpha: 0.5)),
+              ),
+              child: const Icon(
+                Icons.lock_rounded,
+                size: 30,
+                color: _admAccent,
+              ),
+            ),
+            const SizedBox(height: 16),
             const Text(
               'YONETIM sayfasi kilitli',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 8),
             const Text(
-              'Hesap sifrelerini degistirmek ve hesap/takim silmek icin yonetici sifresi gerekir.',
+              'Hesap sifrelerini degistirmek ve hesap/takim silmek icin '
+              'yonetici sifresi gerekir.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white70),
+              style: TextStyle(color: Colors.white60, fontSize: 12.5),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 20),
             FilledButton.icon(
               onPressed: () => _openAdminLogin(targetTab: 6),
-              icon: const Icon(Icons.password),
-              label: const Text('Sifre ile ac'),
+              style: FilledButton.styleFrom(
+                backgroundColor: _admAccent,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 12,
+                ),
+              ),
+              icon: const Icon(Icons.password_rounded, size: 17),
+              label: const Text(
+                'Sifre ile ac',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
             ),
           ],
         ),
@@ -7631,7 +7857,16 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 
   Widget _adminPlayerCard(PlayerProfile profile) {
-    return ExpansionTile(
+    return Container(
+      decoration: BoxDecoration(
+        color: _admCard,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _admBorder),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        shape: const Border(),
+        collapsedShape: const Border(),
       leading: Checkbox(
         value: _adminSelectedPlayerIds.contains(profile.id),
         onChanged: (selected) => setState(() {
@@ -7810,6 +8045,7 @@ class _SetupScreenState extends State<SetupScreen> {
           ),
         ),
       ],
+      ),
     );
   }
 
@@ -7982,9 +8218,18 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 
   Widget _adminTeamCard(SavedGameData data, SavedTeamProfile team) {
-    return ExpansionTile(
-      leading: const Icon(Icons.shield),
-      title: Text('${team.name}  ${team.rating.toStringAsFixed(1)}'),
+    return Container(
+      decoration: BoxDecoration(
+        color: _admCard,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _admBorder),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        shape: const Border(),
+        collapsedShape: const Border(),
+        leading: const Icon(Icons.shield_rounded, color: _admGold),
+        title: Text('${team.name}  ${team.rating.toStringAsFixed(1)}'),
       subtitle: Text(
         'G ${team.wins} B ${team.draws} M ${team.losses} | oyuncu ${team.playerIds.length}',
       ),
@@ -8106,6 +8351,7 @@ class _SetupScreenState extends State<SetupScreen> {
           ],
         ),
       ],
+      ),
     );
   }
 
