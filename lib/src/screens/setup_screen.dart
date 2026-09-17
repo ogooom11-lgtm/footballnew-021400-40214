@@ -1399,7 +1399,12 @@ class _SetupScreenState extends State<SetupScreen> {
                           ),
                           const SizedBox(height: 6),
                           DropdownButtonFormField<String>(
-                            value: data.blueTeamId,
+                            // Defensive: the value must exist among the
+                            // items or Flutter falls back to the first one.
+                            value: data.activeTeams
+                                    .any((t) => t.id == data.blueTeamId)
+                                ? data.blueTeamId
+                                : data.activeTeams.first.id,
                             isDense: true,
                             decoration: const InputDecoration(
                               labelText: 'Mavi takım',
@@ -1494,7 +1499,10 @@ class _SetupScreenState extends State<SetupScreen> {
                           ),
                           const SizedBox(height: 6),
                           DropdownButtonFormField<String>(
-                            value: data.redTeamId,
+                            value: data.activeTeams
+                                    .any((t) => t.id == data.redTeamId)
+                                ? data.redTeamId
+                                : data.activeTeams.first.id,
                             isDense: true,
                             decoration: const InputDecoration(
                               labelText: 'Kırmızı takım',

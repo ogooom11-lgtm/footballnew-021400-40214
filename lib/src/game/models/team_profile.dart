@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../enums/ai_difficulty.dart';
 import '../enums/ai_play_style.dart';
 import '../enums/player_role.dart';
@@ -99,7 +101,9 @@ class SavedTeamProfile {
        matchHistory = matchHistory ?? <TeamMatchRecord>[],
        jerseyKits = jerseyKits ?? JerseyFactory.defaultKits();
 
-  final String id;
+  // Not final: duplicate team ids found in old saves are repaired on load
+  // (مطلب: إصلاح تكرار معرّفات الفرق الذي كان يخرب اختيار الفريق).
+  String id;
   String ownerAccountId; // can only be changed by admin tools
   String name;
   Set<String> playerIds;
@@ -146,9 +150,13 @@ class SavedTeamProfile {
     FormationType formation = FormationType.wing433,
   }) {
     final stamp = DateTime.now().microsecondsSinceEpoch;
+    // Microseconds + random tail: two teams created back to back can
+    // never end up with the same id (مطلب: ما يتكرر معرّف فريقين —
+    // تكرار المعرّفات كان يخلّي الاختيار يلتقط دوماً الفريق الأول).
+    final unique = math.Random().nextInt(1000000);
     final ids = playerIds.toSet();
     return SavedTeamProfile(
-      id: '$stamp-${DateTime.now().millisecondsSinceEpoch}',
+      id: 'team-$stamp-$unique',
       ownerAccountId: ownerAccountId,
       name: name.trim().isEmpty ? 'Takim' : name.trim(),
       playerIds: ids,

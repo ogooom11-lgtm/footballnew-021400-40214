@@ -369,6 +369,24 @@ class SavedGameData {
       team.ensureLineupDefaults(players);
     }
 
+    // ---------- Duplicate team-id repair (مطلب: اختيار الفريق كان
+    // يلتقط دائماً الفريق الأول عندما تتكرر المعرّفات في الحفظ القديم) ----------
+    // Every team must own a UNIQUE id; otherwise dropdowns and lookups
+    // resolve every pick to the first team holding that id. The FIRST team
+    // keeps the original id (so all stored references still point at it)
+    // and every later copy receives a fresh unique id.
+    final seenTeamIds = <String>{};
+    var repairSerial = 0;
+    for (final team in teams) {
+      if (seenTeamIds.add(team.id)) {
+        continue;
+      }
+      repairSerial += 1;
+      team.id =
+          'team-repaired-${DateTime.now().microsecondsSinceEpoch}-$repairSerial';
+      seenTeamIds.add(team.id);
+    }
+
     final activeTeams = teams.where((team) => !team.isDeleted).toList();
     if (activeTeams.isEmpty) {
       final replacement = SavedTeamProfile.create(
