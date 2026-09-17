@@ -598,78 +598,6 @@ class _SetupScreenState extends State<SetupScreen> {
     _showMessage('Oyuncu silindi');
   }
 
-  Future<void> _assignPlayerToTeam(
-    PlayerProfile profile,
-    String? teamId,
-  ) async {
-    final data = _data;
-    if (data == null) {
-      return;
-    }
-    if (teamId != null) {
-      final target = data.teams.firstWhere((team) => team.id == teamId);
-      if (!data.ownsTeam(target)) {
-        return;
-      }
-    }
-    setState(() {
-      for (final team in data.teams) {
-        team.playerIds.remove(profile.id);
-        team.starterPlayerIds.remove(profile.id);
-        team.roleByPlayerId.remove(profile.id);
-      }
-      if (teamId != null) {
-        final team = data.teams.firstWhere((team) => team.id == teamId);
-        team.playerIds.add(profile.id);
-        team.roleByPlayerId[profile.id] = profile.isGoalkeeper
-            ? PlayerRole.goalkeeper
-            : PlayerRole.midfieldLeft;
-        if (team.starterPlayerIds.length < 11) {
-          team.starterPlayerIds.add(profile.id);
-        }
-      }
-      if (data.teams.any((team) => team.id == data.blueTeamId)) {
-        data.bluePlayerIds = data.blueTeam.playerIds;
-      }
-      if (data.teams.any((team) => team.id == data.redTeamId)) {
-        data.redPlayerIds = data.redTeam.playerIds;
-      }
-    });
-    await _save();
-  }
-
-  Future<void> _editPlayerName(PlayerProfile profile) async {
-    final controller = TextEditingController(text: profile.name);
-    final name = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Oyuncu adini duzenle'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Oyuncu adi'),
-          onSubmitted: (value) => Navigator.of(context).pop(value),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Vazgec'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('Kaydet'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (name == null || name.trim().isEmpty) {
-      return;
-    }
-    setState(() => profile.name = name.trim());
-    await _save();
-  }
-
   Future<void> _openAccountDetail() async {
     await _save();
     if (!mounted) return;
@@ -1879,44 +1807,6 @@ class _SetupScreenState extends State<SetupScreen> {
     );
   }
 
-  Widget _teamDropdown({
-    required String title,
-    required String value,
-    required ValueChanged<String> onChanged,
-  }) {
-    final data = _data!;
-    final teams = data.activeTeams;
-    if (teams.isEmpty) {
-      return InputDecorator(
-        decoration: InputDecoration(labelText: title),
-        child: const Text('Kayitli takim yok'),
-      );
-    }
-    final currentValue = teams.any((team) => team.id == value)
-        ? value
-        : teams.first.id;
-    return DropdownButtonFormField<String>(
-      value: currentValue,
-      decoration: InputDecoration(labelText: title),
-      items: teams
-          .map(
-            (team) => DropdownMenuItem(
-              value: team.id,
-              child: Text(
-                '${team.name}  ${data.isTeamOwnerLoggedIn(team) ? 'giris var' : 'giris yok'}  ${team.rating.toStringAsFixed(1)}',
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          )
-          .toList(),
-      onChanged: (id) {
-        if (id != null) {
-          onChanged(id);
-        }
-      },
-    );
-  }
-
   // =====================================================================
   // صفحة «الدول» العامة (مطلب جديد): بعد صفحة Açıklama مباشرة — كل دولة
   // مع فرقها ولاعبيها بتصميم بطاقات جذاب، مع بحث وترتيب وإحصائيات.
@@ -2528,7 +2418,7 @@ class _SetupScreenState extends State<SetupScreen> {
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
-                                  '${player.effectiveOverall.toStringAsFixed(0)}',
+                                  player.effectiveOverall.toStringAsFixed(0),
                                   style: TextStyle(
                                     fontSize: 10.5,
                                     fontWeight: FontWeight.w900,
@@ -3477,12 +3367,12 @@ class _SetupScreenState extends State<SetupScreen> {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xff0b1120), Color(0xff101a30)],
+          colors: [_admCanvas, Color(0xff101a30)],
         ),
       );
 
   /// Soft raised card used everywhere in the admin pages.
-  Widget _admCard({
+  Widget _admCardBox({
     required Widget child,
     EdgeInsetsGeometry padding = const EdgeInsets.all(14),
     Color accent = _admBorder,
@@ -4409,7 +4299,7 @@ class _SetupScreenState extends State<SetupScreen> {
           ),
           const SizedBox(height: 10),
           // Quick team creation straight from the admin page.
-          _admCard(
+          _admCardBox(
             accent: _admGold.withValues(alpha: 0.4),
             child: Row(
               children: [

@@ -2638,7 +2638,7 @@ class _GameScreenState extends State<GameScreen>
       return;
     }
     final logIndex = team.substitutedOut.indexOf(dragged);
-    if (team.bench.indexOf(dragged) < 0 && logIndex >= 0) {
+    if (!team.bench.contains(dragged) && logIndex >= 0) {
       final changed = _engine.reenterFromLog(
         team.id,
         targetSlot,
@@ -3036,17 +3036,16 @@ class _GameScreenState extends State<GameScreen>
                         },
                       ),
                     ),
-                    if (targetPlayer != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text(
-                          'Katılım penceresi: ${_presenceWindowText(targetPlayer)}',
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: Color(0xffb388ff),
-                          ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        'Katılım penceresi: ${_presenceWindowText(targetPlayer)}',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Color(0xffb388ff),
                         ),
                       ),
+                    ),
                     _varAddButton('foul', 'Faul', Icons.sports, targetPlayer),
                     _varAddButton(
                       'handball',
@@ -4071,28 +4070,6 @@ class _GameScreenState extends State<GameScreen>
         key == LogicalKeyboardKey.keyK;
   }
 
-  Widget _goalList(String title, List goals) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
-        const SizedBox(height: 8),
-        if (goals.isEmpty)
-          const Text('Gol yok', style: TextStyle(color: Colors.white60)),
-        for (final goal in goals)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 5),
-            child: Text(
-              "${goal.minute}'  ${goal.scorerName}${goal.isPenalty ? ' (P)' : ''}${goal.canceled ? ' - iptal' : ''}",
-              style: TextStyle(
-                color: goal.canceled ? Colors.white38 : Colors.white,
-                decoration: goal.canceled ? TextDecoration.lineThrough : null,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
 }
 
 /// Banner entrance animation: every new banner slides down and fades in.

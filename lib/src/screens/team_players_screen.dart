@@ -276,11 +276,11 @@ class _TeamPlayersScreenState extends State<TeamPlayersScreen> {
     if (value >= 1e9) {
       final b = value / 1e9;
       return b >= 100
-          ? b.toStringAsFixed(0) + ' milyar'
-          : b.toStringAsFixed(1) + ' milyar';
+          ? '${b.toStringAsFixed(0)} milyar'
+          : '${b.toStringAsFixed(1)} milyar';
     }
     if (value >= 1e6) {
-      return (value / 1e6).toStringAsFixed(0) + ' milyon';
+      return '${(value / 1e6).toStringAsFixed(0)} milyon';
     }
     return value.toStringAsFixed(0);
   }
@@ -1598,7 +1598,6 @@ class _KitsManagerDialogState extends State<_KitsManagerDialog> {
   }
 
   Future<void> _createCustomKit() async {
-    final team = widget.team;
     var shirt = const Color(0xff21304d);
     var shorts = const Color(0xffffffff);
     var socks = const Color(0xff21304d);

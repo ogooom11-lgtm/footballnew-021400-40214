@@ -1310,7 +1310,6 @@ class MatchEngine {
     if (diff.lengthSquared <= 1) {
       return;
     }
-    final team = teamById(player.teamId);
     // Force scales the effort below the player's own top speed; it can
     // never push him beyond it — controlled or not, everyone runs at his
     // own pace (مطلب: ما حدا يركد أسرع من سرعته الحقيقية).
@@ -1396,7 +1395,6 @@ class MatchEngine {
   /// bleeds off acceleration, then move. Used by AI, human control and
   /// goalkeepers alike so every movement feels physical.
   void _applyMomentum(PlayerGame player, Vec2 desiredVelocity, double dt) {
-    final team = teamById(player.teamId);
     // The absolute ceiling is the player's own top speed — momentum can
     // never carry anyone past it (مطلب: سقف السرعة = سرعة اللاعب).
     final clampedDesired =
@@ -4348,7 +4346,6 @@ class MatchEngine {
       }
       return;
     }
-    final team = teamById(player.teamId);
     // Own speed only, never boosted (مطلب: كل لاعب بيركد بسرعته).
     var maxSpeed = player.speed * 60;
     if (ball.owner == player) {

@@ -905,7 +905,7 @@ class PlayerAi {
       final boxX = team.attackDirection == 1
           ? math.min(GameConstants.rightBound - 92, lineX)
           : math.max(GameConstants.leftBound + 92, lineX);
-      final spread = (player.number ?? 8) % 3;
+      final spread = player.number % 3;
       final boxY = GameConstants.virtualHeight / 2 + (spread - 1) * 46;
       return Vec2(boxX, boxY.clamp(
         GameConstants.virtualHeight / 2 - 95,
@@ -1765,7 +1765,6 @@ class PlayerAi {
       // Everyone holds a normal role lane; only the attacking line pulls
       // back — to just past the first third of the pitch — so the keeper
       // has room to build up (مطلب ضربة المرمى).
-      final centerX = GameConstants.virtualWidth / 2;
       final ownHalfX = team.attackDirection == 1
           ? GameConstants.leftBound + GameConstants.pitchWidth * 0.42
           : GameConstants.rightBound - GameConstants.pitchWidth * 0.42;

@@ -394,7 +394,7 @@ class TeamGame {
       return false;
     }
     final role = outgoing.role;
-    final number = returning.number ?? outgoing.number;
+    final number = returning.number;
     final position = outgoing.pos.copy();
     final home = outgoing.homePos.copy();
     final replacement =
