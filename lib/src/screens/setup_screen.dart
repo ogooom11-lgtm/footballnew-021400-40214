@@ -113,6 +113,10 @@ class _SetupScreenState extends State<SetupScreen> {
     if (!mounted) {
       return;
     }
+    // The selected match teams must ALWAYS reference real active teams by
+    // their ids — never by list order (مطلب: الفريق الظاهر هو نفسه
+    // المحدد فعلياً، والمرجع معرّف الفريق وليس ترتيب القائمة).
+    _sanitizeTeamSelection(data);
     // Keep the current admin session alive across in-app page reloads.
     // It only expires when the app restarts or the admin locks it.
     final previous = _data;
@@ -132,11 +136,50 @@ class _SetupScreenState extends State<SetupScreen> {
     setState(() => _data = data);
   }
 
+  /// Repairs the blue/red selection when a stored team id no longer points
+  /// to an active team (deleted teams etc.). Everything is resolved by
+  /// TEAM ID — the list order is never used as a reference, so the team
+  /// shown in the dropdowns is exactly the team passed to the match
+  /// (مطلب: لا يعتمد على الترتيب، والمعرّف هو المرجع الوحيد).
+  void _sanitizeTeamSelection(SavedGameData data) {
+    final active = data.activeTeams;
+    if (active.isEmpty) {
+      return;
+    }
+    bool isActive(String id) => active.any((team) => team.id == id);
+    if (!isActive(data.blueTeamId)) {
+      final owned = data.ownedTeams;
+      final pick = owned.isNotEmpty ? owned.first : active.first;
+      data.blueTeamId = pick.id;
+      data.bluePlayerIds = Set.of(pick.playerIds);
+      data.blueFormation = pick.formation;
+      _bluePlayStyle = pick.playStyle;
+      _blueKitIndex = pick.activeKitIndex;
+    }
+    if (!isActive(data.redTeamId)) {
+      final owned = data.ownedTeams;
+      final pick = owned.firstWhere(
+        (team) => team.id != data.blueTeamId,
+        orElse: () => active.firstWhere(
+          (team) => team.id != data.blueTeamId,
+          orElse: () => active.first,
+        ),
+      );
+      data.redTeamId = pick.id;
+      data.redPlayerIds = Set.of(pick.playerIds);
+      data.redFormation = pick.formation;
+      _redPlayStyle = pick.playStyle;
+      _redKitIndex = pick.activeKitIndex;
+    }
+  }
+
   Future<void> _save() async {
     final data = _data;
     if (data == null) {
       return;
     }
+    // Never persist a selection pointing at a missing team.
+    _sanitizeTeamSelection(data);
     if (data.isTeamOwnerLoggedIn(data.blueTeam)) {
       data.blueTeam
         ..name = _blueNameController.text.trim().isEmpty
@@ -391,10 +434,92 @@ class _SetupScreenState extends State<SetupScreen> {
     await _save();
   }
 
+  /// Country picker fed EXCLUSIVELY by the countries catalogue — the list
+  /// contains only countries added on the countries page (مطلب: لا دول
+  /// افتراضية ولا دول غير موجودة في الكتالوج). Returns null on cancel.
+  Future<String?> _pickCatalogCountry(SavedGameData data, String title) async {
+    var picked = 'غير محدد';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xff0e1c17),
+          title: Text(title),
+          content: SizedBox(
+            width: 380,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                DropdownButtonFormField<String>(
+                  value: data.countries.contains(picked)
+                      ? picked
+                      : 'غير محدد',
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Takim ulkesi',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    const DropdownMenuItem(
+                      value: 'غير محدد',
+                      child: Text('Belirsiz'),
+                    ),
+                    for (final country in data.countries)
+                      DropdownMenuItem(value: country, child: Text(country)),
+                  ],
+                  onChanged: (value) => setDialogState(
+                    () => picked = value ?? 'غير محدد',
+                  ),
+                ),
+                if (data.countries.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text(
+                      'Henuz ulke eklenmedi — once Ulkeler sayfasindan '
+                      'ulke ekleyin.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Color(0xffffd34d),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Vazgec'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xff00d084),
+                foregroundColor: const Color(0xff00130c),
+              ),
+              child: const Text('Tamam'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true) return null;
+    return picked;
+  }
+
   Future<void> _addTeam() async {
     final data = _data;
     if (data == null || _newTeamController.text.trim().isEmpty) {
       return;
+    }
+    // Country is chosen from the catalogue ONLY — countries added on the
+    // countries page, nothing else (مطلب: قائمة الدول من الكتالوج فقط).
+    var pickedCountry = 'غير محدد';
+    if (data.countries.isNotEmpty) {
+      final picked = await _pickCatalogCountry(data, 'Ulke sec');
+      if (picked == null || !mounted) return;
+      pickedCountry = picked;
     }
     final team = SavedTeamProfile.create(
       ownerAccountId: data.activeAccountId,
@@ -402,16 +527,17 @@ class _SetupScreenState extends State<SetupScreen> {
       playerIds: const [],
     );
     setState(() {
+      team.country = pickedCountry;
       data.teams.add(team);
       data.blueTeamId = team.id;
-      data.bluePlayerIds = team.playerIds;
+      data.bluePlayerIds = Set.of(team.playerIds);
       data.blueFormation = team.formation;
       _blueNameController.text = team.name;
       if (data.redTeamId == data.blueTeamId && data.ownedTeams.length > 1) {
         data.redTeamId = data.ownedTeams
             .firstWhere((ownedTeam) => ownedTeam.id != team.id)
             .id;
-        data.redPlayerIds = data.redTeam.playerIds;
+        data.redPlayerIds = Set.of(data.redTeam.playerIds);
         data.redFormation = data.redTeam.formation;
         _redNameController.text = data.redTeam.name;
       }
@@ -1291,13 +1417,18 @@ class _SetupScreenState extends State<SetupScreen> {
                             ],
                             onChanged: (id) {
                               if (id == null) return;
-                              final team =
-                                  data.teams.firstWhere((team) => team.id == id);
+                              final team = data.teams.firstWhere(
+                                (team) => team.id == id,
+                                orElse: () => data.activeTeams.first,
+                              );
+                              // Copy the squad set — aliasing the team's own
+                              // set would leak edits across selections.
                               setState(() {
                                 data.blueTeamId = team.id;
-                                data.bluePlayerIds = team.playerIds;
+                                data.bluePlayerIds = Set.of(team.playerIds);
                                 data.blueFormation = team.formation;
                                 _bluePlayStyle = team.playStyle;
+                                _blueKitIndex = team.activeKitIndex;
                                 _blueNameController.text = team.name;
                               });
                               _save();
@@ -1381,13 +1512,16 @@ class _SetupScreenState extends State<SetupScreen> {
                             ],
                             onChanged: (id) {
                               if (id == null) return;
-                              final team =
-                                  data.teams.firstWhere((team) => team.id == id);
+                              final team = data.teams.firstWhere(
+                                (team) => team.id == id,
+                                orElse: () => data.activeTeams.first,
+                              );
                               setState(() {
                                 data.redTeamId = team.id;
-                                data.redPlayerIds = team.playerIds;
+                                data.redPlayerIds = Set.of(team.playerIds);
                                 data.redFormation = team.formation;
                                 _redPlayStyle = team.playStyle;
+                                _redKitIndex = team.activeKitIndex;
                                 _redNameController.text = team.name;
                               });
                               _save();
@@ -4869,13 +5003,10 @@ class _SetupScreenState extends State<SetupScreen> {
       text: current == 'غير محدد' ? '' : current,
     );
     var includePlayers = false;
+    // Only countries added from the countries page are offered —
+    // never implicit or default countries (مطلب: فقط دول الكتالوج).
     final suggestions = <String>{
-      if (data != null) ...[
-        for (final player in data.players)
-          if (player.country != 'غير محدد') player.country,
-        for (final team in data.teams)
-          if (!team.isDeleted && team.country != 'غير محدد') team.country,
-      ],
+      if (data != null) ...data.countries,
     }.toList()
       ..sort((a, b) => a.compareTo(b));
     await showDialog<void>(
@@ -8001,17 +8132,32 @@ class _SetupScreenState extends State<SetupScreen> {
       _showMessage('Bu isimde bir takim zaten var');
       return;
     }
+    // Catalogue-only country pick (مطلب: الدول من صفحة الدول فقط).
+    var pickedCountry = 'غير محدد';
+    if (data.countries.isNotEmpty) {
+      final picked = await _pickCatalogCountry(data, 'Ulke sec');
+      if (picked == null || !mounted) return;
+      pickedCountry = picked;
+    }
     final team = SavedTeamProfile.create(
       ownerAccountId: data.activeAccountId,
       name: name,
       playerIds: const [],
     );
-    setState(() => data.teams.add(team));
+    setState(() {
+      team.country = pickedCountry;
+      data.teams.add(team);
+    });
     _adminNewTeamController.clear();
     await _save();
     _showMessage('$name takimi olusturuldu');
   }
 
+  /// Full team deletion (مطلب: حذف الفريق بالكامل من الإدارة).
+  /// A clear confirmation asks whether the players go with the team:
+  ///  * 'withPlayers' — team AND all its players are removed for good.
+  ///  * 'teamOnly'    — the team is removed, its players become free
+  ///                    agents without a team.
   Future<void> _deleteTeam(SavedTeamProfile team) async {
     final data = _data;
     if (data == null) return;
@@ -8019,34 +8165,211 @@ class _SetupScreenState extends State<SetupScreen> {
       _showMessage('En az bir aktif takim kalmali');
       return;
     }
-    final confirm = await showDialog<bool>(
+    final squadCount = team.playerIds.length;
+    final choice = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Takimi Sil'),
+        backgroundColor: const Color(0xff0e1c17),
+        title: const Text('Takimi sil'),
         content: Text(
-          '${team.name} takimini silmek istediginize emin misiniz?',
+          '${team.name} takimi kalici olarak silinecek.\n\n'
+          'Takimla birlikte oyunculari da silmek istiyor musunuz?\n'
+          '($squadCount oyuncu bagli)',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
+            onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('Vazgec'),
           ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(ctx).pop('teamOnly'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xffffd34d),
+              side: const BorderSide(color: Color(0xffffd34d)),
+            ),
+            icon: const Icon(Icons.person_outline, size: 16),
+            label: const Text(
+              'Hayir, sadece takim silinsin',
+              style: TextStyle(fontSize: 12),
+            ),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(ctx).pop('withPlayers'),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Sil'),
+            icon: const Icon(Icons.delete_forever, size: 16),
+            label: const Text(
+              'Evet, takim ve oyuncular silinsin',
+              style: TextStyle(fontSize: 12),
+            ),
           ),
         ],
       ),
     );
-    if (confirm != true) return;
+    if (choice == null || !mounted) return;
+
+    final squadIds = Set.of(team.playerIds);
     setState(() {
-      team.isDeleted = true;
+      if (choice == 'withPlayers') {
+        data.players.removeWhere((player) => squadIds.contains(player.id));
+        data.bluePlayerIds.removeAll(squadIds);
+        data.redPlayerIds.removeAll(squadIds);
+        _manageSelectedIds.removeAll(squadIds);
+        _adminSelectedPlayerIds.removeAll(squadIds);
+        for (final other in data.teams) {
+          if (other.id == team.id) continue;
+          other.playerIds.removeAll(squadIds);
+          other.starterPlayerIds.removeAll(squadIds);
+          for (final id in squadIds) {
+            other.roleByPlayerId.remove(id);
+            other.slotByPlayerId.remove(id);
+          }
+        }
+      }
+      // HARD delete — the team is gone from the database entirely.
+      data.teams.removeWhere((t) => t.id == team.id);
       data.transferRequests.removeWhere(
         (request) => request.targetTeamId == team.id,
       );
+      // Repair the match selection when it referenced the removed team.
+      final remaining = data.activeTeams;
+      if (remaining.isNotEmpty) {
+        if (data.blueTeamId == team.id) {
+          final pick = remaining.first;
+          data.blueTeamId = pick.id;
+          data.bluePlayerIds = Set.of(pick.playerIds);
+          data.blueFormation = pick.formation;
+          _bluePlayStyle = pick.playStyle;
+          _blueKitIndex = pick.activeKitIndex;
+          _blueNameController.text = pick.name;
+        }
+        if (data.redTeamId == team.id) {
+          final pick = remaining.firstWhere(
+            (t) => t.id != data.blueTeamId,
+            orElse: () => remaining.first,
+          );
+          data.redTeamId = pick.id;
+          data.redPlayerIds = Set.of(pick.playerIds);
+          data.redFormation = pick.formation;
+          _redPlayStyle = pick.playStyle;
+          _redKitIndex = pick.activeKitIndex;
+          _redNameController.text = pick.name;
+        }
+      }
     });
     await _save();
+    _showMessage(
+      choice == 'withPlayers'
+          ? 'Takim ve oyunculari silindi'
+          : 'Takim silindi — oyuncular takimlarindan cikarildi',
+    );
+  }
+
+  /// Team data editor: rename the team and pick its country from the
+  /// catalogue (only countries added on the countries page are offered —
+  // مطلب: تعديل بيانات الفريق ودولته من الكتالوج فقط).
+  Future<void> _editTeamDialog(SavedGameData data, SavedTeamProfile team) async {
+    final nameController = TextEditingController(text: team.name);
+    // The stored country is pre-selected only when it is still part of the
+    // catalogue — otherwise the field falls back to "Belirsiz" so editing
+    // never silently keeps a stale value (مطلب: الدولة المحفوظة تظهر صح).
+    String pickedCountry = data.countries.contains(team.country)
+        ? team.country
+        : 'غير محدد';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xff0e1c17),
+          title: Text('Takimi duzenle — ${team.name}'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: nameController,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Takim adi',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: data.countries.contains(pickedCountry)
+                      ? pickedCountry
+                      : 'غير محدد',
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Ulke',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    const DropdownMenuItem(
+                      value: 'غير محدد',
+                      child: Text('Belirsiz'),
+                    ),
+                    for (final country in data.countries)
+                      DropdownMenuItem(
+                        value: country,
+                        child: Text(country),
+                      ),
+                  ],
+                  onChanged: (value) => setDialogState(
+                    () => pickedCountry = value ?? 'غير محدد',
+                  ),
+                ),
+                if (data.countries.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text(
+                      'Henuz ulke eklenmedi — once Ulkeler sayfasindan '
+                      'ulke ekleyin.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Color(0xffffd34d),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Vazgec'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xff00d084),
+                foregroundColor: const Color(0xff00130c),
+              ),
+              child: const Text('Kaydet'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final newName = nameController.text.trim();
+    nameController.dispose();
+    if (confirmed != true || newName.isEmpty || !mounted) return;
+    setState(() {
+      team.name = newName;
+      team.country = pickedCountry;
+      // Keep the match-selection name fields in sync.
+      if (data.blueTeamId == team.id) {
+        data.blueName = newName;
+        _blueNameController.text = newName;
+      }
+      if (data.redTeamId == team.id) {
+        data.redName = newName;
+        _redNameController.text = newName;
+      }
+    });
+    await _save();
+    _showMessage('Takim guncellendi');
   }
 
   Widget _teamSummary(SavedGameData data) {
@@ -8185,6 +8508,18 @@ class _SetupScreenState extends State<SetupScreen> {
                 style: const TextStyle(fontWeight: FontWeight.w900),
               ),
             ),
+            if (isAdmin)
+              IconButton(
+                icon: const Icon(
+                  Icons.edit_outlined,
+                  color: Color(0xff7ab8ff),
+                  size: 18,
+                ),
+                onPressed: () => _editTeamDialog(data, team),
+                tooltip: 'Takimi duzenle',
+                constraints: const BoxConstraints(),
+                padding: const EdgeInsets.all(4),
+              ),
             if (isAdmin)
               IconButton(
                 icon: const Icon(

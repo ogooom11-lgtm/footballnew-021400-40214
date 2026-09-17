@@ -39,6 +39,11 @@ dependencies:
   # (مطلب: تحديد اكثر من ملف واستيرادهم بسرعة).
   file_selector: ^1.0.3
 
+  # SQLite database — stronger storage than the old JSON file
+  # (مطلب: قاعدة بيانات اقوى من جسون مع ترحيل تلقائي للبيانات القديمة).
+  sqflite_common_ffi: ^2.3.3
+  sqlite3_flutter_libs: ^0.5.24
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

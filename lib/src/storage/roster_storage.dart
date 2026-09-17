@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
 import '../game/enums/match_mode.dart';
 import '../game/enums/ai_difficulty.dart';
 import '../game/enums/ai_play_style.dart';
@@ -139,11 +141,10 @@ class SavedGameData {
     List<String>? countries,
     List<FinishedMatchSummary>? matchArchive,
     List<TransferRequest>? transferRequests,
-  }) : countries = countries ??
-            <String>[
-              'Katar', 'Suudi Arabistan', 'Mısır', 'Fas', 'Brezilya', 'Arjantin',
-              'Fransa', 'İspanya', 'İngiltere', 'Almanya', 'Türkiye', 'Irak',
-            ],
+  }) : // No built-in countries: the catalogue only ever contains countries
+       // added from the admin countries page (مطلب: لا دول افتراضية —
+       // فقط الدول المضافة من صفحة الدول تظهر في القوائم).
+       countries = countries ?? <String>[],
        matchArchive = matchArchive ?? <FinishedMatchSummary>[],
        transferRequests = transferRequests ?? <TransferRequest>[];
 
@@ -419,8 +420,8 @@ class SavedGameData {
           (mode) => mode.name == json['mode'],
           orElse: () => MatchMode.league,
         ),
-        bluePlayerIds: blueTeam.playerIds,
-        redPlayerIds: redTeam.playerIds,
+        bluePlayerIds: Set.of(blueTeam.playerIds),
+        redPlayerIds: Set.of(redTeam.playerIds),
         blueAiControlled: json['blueAiControlled'] as bool? ?? false,
         redAiControlled: json['redAiControlled'] as bool? ?? false,
         aiDifficulty: AiDifficulty.values.firstWhere(
@@ -483,8 +484,8 @@ class SavedGameData {
     }
     blueTeamId = owned.first.id;
     redTeamId = owned.length > 1 ? owned[1].id : owned.first.id;
-    bluePlayerIds = blueTeam.playerIds;
-    redPlayerIds = redTeam.playerIds;
+    bluePlayerIds = Set.of(blueTeam.playerIds);
+    redPlayerIds = Set.of(redTeam.playerIds);
     blueFormation = blueTeam.formation;
     redFormation = redTeam.formation;
     blueName = blueTeam.name;
@@ -524,58 +525,181 @@ class SavedGameData {
   }
 }
 
+/// Persistent storage backed by a real SQLite database
+/// (مطلب: قاعدة بيانات أقوى من جسون).
+///
+/// Layout:
+///  * `accounts`  — one row per account (normalized).
+///  * `countries` — the country catalogue, one row per country (normalized).
+///  * `save_data` — the full game state as an atomic payload written inside
+///    a transaction, so a crash can never leave a half-written file behind
+///    the way the old JSON file could.
+///
+/// On first launch after the upgrade, the old JSON file is imported into
+/// the database and renamed to `*.migrated.bak` — nothing is lost.
 class RosterStorage {
   RosterStorage();
 
-  File get _file {
+  static const int schemaVersion = 1;
+
+  String get _baseDir {
     final appData = Platform.environment['APPDATA'];
-    final base = appData == null || appData.isEmpty
+    return appData == null || appData.isEmpty
         ? Directory.current.path
         : '$appData${Platform.pathSeparator}BombanFutbol';
-    return File('$base${Platform.pathSeparator}kayitli_oyuncular.json');
+  }
+
+  File get _legacyJsonFile =>
+      File('$_baseDir${Platform.pathSeparator}kayitli_oyuncular.json');
+
+  Future<Database> _openDb() async {
+    await Directory(_baseDir).create(recursive: true);
+    final path = '$_baseDir${Platform.pathSeparator}bomban_futbol.db';
+    final db = await databaseFactory.openDatabase(
+      path,
+      options: OpenDatabaseOptions(
+        version: schemaVersion,
+        onCreate: (db, _) async {
+          await db.execute(
+            'CREATE TABLE IF NOT EXISTS accounts ('
+            'id TEXT PRIMARY KEY, '
+            'username TEXT NOT NULL, '
+            'password_hash TEXT NOT NULL)',
+          );
+          await db.execute(
+            'CREATE TABLE IF NOT EXISTS countries ('
+            'name TEXT PRIMARY KEY)',
+          );
+          await db.execute(
+            'CREATE TABLE IF NOT EXISTS save_data ('
+            'id INTEGER PRIMARY KEY CHECK (id = 1), '
+            'payload TEXT NOT NULL, '
+            'updated_at INTEGER NOT NULL)',
+          );
+        },
+      ),
+    );
+    return db;
+  }
+
+  /// Imports the legacy JSON save into the database, then retires the
+  /// JSON file (مطلب: وقت افتح التطبيق والبيانات لسا جسون تنقل للقاعدة).
+  Future<SavedGameData?> _migrateLegacyJson() async {
+    final file = _legacyJsonFile;
+    if (!await file.exists()) {
+      return null;
+    }
+    try {
+      final json =
+          jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      final data = SavedGameData.fromJson(json);
+      await save(data);
+      // Keep a safety copy instead of deleting outright.
+      try {
+        await file.rename('${file.path}.migrated.bak');
+      } catch (_) {
+        // Renaming failed (locked file etc.) — the data is safe in SQLite.
+      }
+      return data;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<SavedGameData> load() async {
     try {
-      final file = _file;
-      if (!await file.exists()) {
-        final defaults = SavedGameData.defaults();
-        await save(defaults);
-        return defaults;
-      }
-      final json =
-          jsonDecode(await file.readAsString()) as Map<String, dynamic>;
-      final data = SavedGameData.fromJson(json);
-      if (data.players.isEmpty) {
-        return SavedGameData.defaults();
-      }
-      // Daily recovery: injured players lose one injury day per real day
-      // that passed since the last time the game was opened, and fitness
-      // keeps recovering. Persisted only when something actually changed.
-      final now = DateTime.now();
-      var needsSave = false;
-      for (final player in data.players) {
-        if (player.fitness < 1.0 || player.injuredDaysRemaining > 0) {
-          needsSave = true;
+      final db = await _openDb();
+      try {
+        final rows = await db.query('save_data', where: 'id = 1');
+        SavedGameData data;
+        if (rows.isEmpty) {
+          // No database save yet: import the old JSON file when present,
+          // otherwise start fresh.
+          final migrated = await _migrateLegacyJson();
+          data = migrated ?? SavedGameData.defaults();
+          if (migrated == null) {
+            await save(data);
+          }
+        } else {
+          final payload = rows.first['payload'] as String;
+          data = SavedGameData.fromJson(
+            jsonDecode(payload) as Map<String, dynamic>,
+          );
+          if (data.players.isEmpty) {
+            data = SavedGameData.defaults();
+          }
         }
-        player.recoverFitness(now);
-        player.recoverInjuryDays(now);
+        // Daily recovery: injured players lose one injury day per real day
+        // that passed since the game was last opened, and fitness keeps
+        // recovering. Persisted only when something actually changed.
+        final now = DateTime.now();
+        var needsSave = false;
+        for (final player in data.players) {
+          if (player.fitness < 1.0 || player.injuredDaysRemaining > 0) {
+            needsSave = true;
+          }
+          player.recoverFitness(now);
+          player.recoverInjuryDays(now);
+        }
+        if (needsSave) {
+          await save(data);
+        }
+        return data;
+      } finally {
+        await db.close();
       }
-      if (needsSave) {
-        await save(data);
-      }
-      return data;
     } catch (_) {
+      // Last resort: fall back to the legacy JSON file, then to defaults.
+      try {
+        final file = _legacyJsonFile;
+        if (await file.exists()) {
+          final json =
+              jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+          return SavedGameData.fromJson(json);
+        }
+      } catch (_) {}
       return SavedGameData.defaults();
     }
   }
 
   Future<void> save(SavedGameData data) async {
-    final file = _file;
-    await file.parent.create(recursive: true);
-    await file.writeAsString(
-      const JsonEncoder.withIndent('  ').convert(data.toJson()),
-    );
+    final db = await _openDb();
+    try {
+      final payload =
+          const JsonEncoder().convert(data.toJson());
+      await db.transaction((txn) async {
+        // Normalized account rows.
+        await txn.delete('accounts');
+        for (final account in data.accounts) {
+          await txn.insert('accounts', {
+            'id': account.id,
+            'username': account.username,
+            'password_hash': account.passwordHash,
+          });
+        }
+        // Normalized country catalogue.
+        await txn.delete('countries');
+        for (final country in data.countries) {
+          await txn.insert(
+            'countries',
+            {'name': country},
+            conflictAlgorithm: ConflictAlgorithm.ignore,
+          );
+        }
+        // Atomic full-state payload.
+        await txn.insert(
+          'save_data',
+          {
+            'id': 1,
+            'payload': payload,
+            'updated_at': DateTime.now().millisecondsSinceEpoch,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      });
+    } finally {
+      await db.close();
+    }
   }
 }
 
